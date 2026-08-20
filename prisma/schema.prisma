@@ -48,6 +48,13 @@ model Employee {
   @@map("employees")
 }
 
+model Customer {
+  id   Int    @id @default(autoincrement())
+  name String
+
+  @@map("customers")
+}
+
 model Attendance {
   id         Int              @id @default(autoincrement())
   employeeId Int
