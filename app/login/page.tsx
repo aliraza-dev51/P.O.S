@@ -219,7 +219,7 @@ export default function LoginPage() {
             </Box>
 
             <Typography variant="body2" color="text.secondary" sx ={{ textAlign: "center" }}>
-              New to VPOS?{" "}
+              New to NextPOS?{" "}
               <Link href="/signup" style={{ fontWeight: 600 }}>
                 Create an account
               </Link>

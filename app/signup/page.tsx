@@ -117,7 +117,11 @@ export default function SignupPage() {
               <Typography variant="h5" sx={{ fontWeight: 700 }}>
                 Create your account
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 0.5 }}
+              >
                 Sign up to manage your VPOS workspace
               </Typography>
             </Box>
@@ -158,7 +162,11 @@ export default function SignupPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   required
-                  inputProps={{ minLength: 8 }}
+                  slotProps={{
+                    htmlInput: {
+                      minLength: 8,
+                    },
+                  }}
                   autoComplete="new-password"
                 />
                 <TextField
@@ -177,12 +185,20 @@ export default function SignupPage() {
                   disabled={loading}
                   sx={{ height: 50, borderRadius: 2, fontWeight: 700 }}
                 >
-                  {loading ? <CircularProgress size={24} color="inherit" /> : "Sign up"}
+                  {loading ? (
+                    <CircularProgress size={24} color="inherit" />
+                  ) : (
+                    "Sign up"
+                  )}
                 </Button>
               </Stack>
             </Box>
 
-            <Typography variant="body2" color="text.secondary" textAlign="center">
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ textAlign: "center" }}
+            >
               Already have an account?{" "}
               <Link href="/login" style={{ fontWeight: 600 }}>
                 Sign in / Log in
