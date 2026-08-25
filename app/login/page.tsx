@@ -218,7 +218,7 @@ export default function LoginPage() {
               </Typography>
             </Box>
 
-            <Typography variant="body2" color="text.secondary" textAlign="center">
+            <Typography variant="body2" color="text.secondary" sx ={{ textAlign: "center" }}>
               New to VPOS?{" "}
               <Link href="/signup" style={{ fontWeight: 600 }}>
                 Create an account
