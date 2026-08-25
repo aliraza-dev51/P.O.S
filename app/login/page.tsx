@@ -189,34 +189,6 @@ export default function LoginPage() {
 
             {/* Demo credentials */}
 
-            <Box
-              sx={{
-                p: 2,
-                bgcolor: "grey.50",
-                borderRadius: 2,
-              }}
-            >
-              <Typography
-                variant="caption"
-                color="text.secondary"
-              >
-                Admin account
-              </Typography>
-
-              <Typography
-                variant="body2"
-                sx={{ mt: 0.5 }}
-              >
-                admin@vpos.com
-              </Typography>
-
-              <Typography
-                variant="body2"
-                color="text.secondary"
-              >
-                Password: admin123
-              </Typography>
-            </Box>
 
             <Typography variant="body2" color="text.secondary" sx ={{ textAlign: "center" }}>
               New to NextPOS?{" "}
