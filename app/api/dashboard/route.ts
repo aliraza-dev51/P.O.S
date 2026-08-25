@@ -32,7 +32,7 @@ export async function GET() {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
 
     // ==========================================
-    // SALES
+    // TODAY'S SALES
     // ==========================================
 
     const todaySales = await prisma.sale.findMany({
@@ -52,8 +52,23 @@ export async function GET() {
       0
     );
 
-    const todayExpense = todaySales.reduce(
-      (total, sale) => total + Number(sale.expense),
+    // ==========================================
+    // TODAY'S VENDOR EXPENSE
+    //
+    // Paid + Unpaid dono include honge
+    // ==========================================
+
+    const todayVendorBills = await prisma.vendorBill.findMany({
+      where: {
+        dateTime: {
+          gte: todayStart,
+          lte: todayEnd,
+        },
+      },
+    });
+
+    const todayExpense = todayVendorBills.reduce(
+      (total, bill) => total + Number(bill.billAmount),
       0
     );
 
@@ -61,136 +76,136 @@ export async function GET() {
     // CREDIT
     // ==========================================
 
-    const creditCustomers =
-      await prisma.creditCustomer.findMany();
+    const creditCustomers = await prisma.creditCustomer.findMany();
 
     const totalCredit = creditCustomers.reduce(
-      (total, customer) =>
-        total + Number(customer.currentAmount),
+      (total, customer) => total + Number(customer.currentAmount),
       0
     );
 
     // ==========================================
-    // VENDOR BILLS
+    // ALL VENDOR BILLS
+    //
+    // Expense = Paid + Unpaid
     // ==========================================
 
-    const unpaidVendorBills =
-      await prisma.vendorBill.findMany({
-        where: {
-          status: "UNPAID",
-        },
-      });
+    const allVendorBills = await prisma.vendorBill.findMany();
 
-    const unpaidVendorAmount =
-      unpaidVendorBills.reduce(
-        (total, bill) =>
-          total + Number(bill.billAmount),
-        0
-      );
+    const totalExpense = allVendorBills.reduce(
+      (total, bill) => total + Number(bill.billAmount),
+      0
+    );
+
+    // ==========================================
+    // UNPAID VENDOR BILLS
+    // ==========================================
+
+    const unpaidVendorBills = allVendorBills.filter(
+      (bill) => bill.status === "UNPAID"
+    );
+
+    const unpaidVendorAmount = unpaidVendorBills.reduce(
+      (total, bill) => total + Number(bill.billAmount),
+      0
+    );
 
     // ==========================================
     // INVESTMENTS
     // ==========================================
 
-    const investments =
-      await prisma.investment.findMany({
-        orderBy: {
-          dateTime: "desc",
-        },
-      });
+    const investments = await prisma.investment.findMany({
+      orderBy: {
+        dateTime: "desc",
+      },
+    });
 
-    /*
-      IMPORTANT
+    const calculateInvestment = (
+      rate: unknown,
+      quantity: unknown
+    ) => {
+      return Number(rate) * Number(quantity);
+    };
 
-      Invest page mein:
-
-      Total Investment = rate × quantity
-
-      Example:
-
-      Rate = 1200
-      Quantity = 10
-      Qty/Pack = 12
-
-      Investment = 1200 × 10
-                  = 12,000
-
-      quantityPerPack ko investment amount
-      mein multiply nahi karna.
-    */
-
-    const totalInvestment =
-      investments.reduce(
-        (total, investment) => {
-          const amount =
-            Number(investment.rate) *
-            Number(investment.quantity);
-
-          return total + amount;
-        },
-        0
-      );
+    const totalInvestment = investments.reduce(
+      (total, investment) =>
+        total +
+        calculateInvestment(
+          investment.rate,
+          investment.quantity
+        ),
+      0
+    );
 
     // ==========================================
     // TODAY'S INVESTMENT
     // ==========================================
 
-    const todayInvestments =
-      investments.filter((investment) => {
-        const investmentDate =
-          new Date(investment.dateTime);
+    const todayInvestments = investments.filter((investment) => {
+      const investmentDate = new Date(investment.dateTime);
 
-        return (
-          investmentDate >= todayStart &&
-          investmentDate <= todayEnd
-        );
-      });
-
-    const todayInvestmentAmount =
-      todayInvestments.reduce(
-        (total, investment) => {
-          const amount =
-            Number(investment.rate) *
-            Number(investment.quantity);
-
-          return total + amount;
-        },
-        0
+      return (
+        investmentDate >= todayStart &&
+        investmentDate <= todayEnd
       );
+    });
+
+    const todayInvestmentAmount = todayInvestments.reduce(
+      (total, investment) =>
+        total +
+        calculateInvestment(
+          investment.rate,
+          investment.quantity
+        ),
+      0
+    );
 
     // ==========================================
     // WEEKLY SALES
     // ==========================================
 
-    const weeklySales =
-      await prisma.sale.findMany({
-        where: {
-          date: {
-            gte: sevenDaysAgo,
-            lte: todayEnd,
-          },
+    const weeklySales = await prisma.sale.findMany({
+      where: {
+        date: {
+          gte: sevenDaysAgo,
+          lte: todayEnd,
         },
-        orderBy: {
-          date: "asc",
+      },
+      orderBy: {
+        date: "asc",
+      },
+    });
+
+    // ==========================================
+    // WEEKLY VENDOR EXPENSES
+    // ==========================================
+
+    const weeklyVendorBills = await prisma.vendorBill.findMany({
+      where: {
+        dateTime: {
+          gte: sevenDaysAgo,
+          lte: todayEnd,
         },
-      });
+      },
+      orderBy: {
+        dateTime: "asc",
+      },
+    });
 
     // ==========================================
     // WEEKLY INVESTMENTS
     // ==========================================
 
-    const weeklyInvestments =
-      await prisma.investment.findMany({
-        where: {
-          dateTime: {
-            gte: sevenDaysAgo,
-            lte: todayEnd,
-          },
+    const weeklyInvestments = await prisma.investment.findMany({
+      where: {
+        dateTime: {
+          gte: sevenDaysAgo,
+          lte: todayEnd,
         },
-        orderBy: {
-          dateTime: "asc",
-        },
-      });
+      },
+      orderBy: {
+        dateTime: "asc",
+      },
+    });
 
     // ==========================================
     // CHART DATA
@@ -201,106 +216,89 @@ export async function GET() {
     for (let i = 0; i < 7; i++) {
       const date = new Date(sevenDaysAgo);
 
-      date.setDate(
-        sevenDaysAgo.getDate() + i
-      );
+      date.setDate(sevenDaysAgo.getDate() + i);
 
-      const dayStart =
-        getStartOfDay(date);
+      const dayStart = getStartOfDay(date);
+      const dayEnd = getEndOfDay(date);
 
-      const dayEnd =
-        getEndOfDay(date);
+      // ------------------------------------------
+      // SALES
+      // ------------------------------------------
 
-      // ------------------------------
-      // DAY SALES
-      // ------------------------------
+      const daySales = weeklySales
+        .filter((sale) => {
+          const saleDate = new Date(sale.date);
 
-      const daySales =
-        weeklySales
-          .filter((sale) => {
-            const saleDate =
-              new Date(sale.date);
+          return (
+            saleDate >= dayStart &&
+            saleDate <= dayEnd
+          );
+        })
+        .reduce(
+          (total, sale) =>
+            total + Number(sale.saleAmount),
+          0
+        );
 
-            return (
-              saleDate >= dayStart &&
-              saleDate <= dayEnd
-            );
-          })
-          .reduce(
-            (total, sale) =>
-              total +
-              Number(sale.saleAmount),
-            0
+      // ------------------------------------------
+      // EXPENSES
+      //
+      // Vendor bills:
+      // Paid + Unpaid
+      // ------------------------------------------
+
+      const dayExpense = weeklyVendorBills
+        .filter((bill) => {
+          const billDate = new Date(bill.dateTime);
+
+          return (
+            billDate >= dayStart &&
+            billDate <= dayEnd
+          );
+        })
+        .reduce(
+          (total, bill) =>
+            total + Number(bill.billAmount),
+          0
+        );
+
+      // ------------------------------------------
+      // INVESTMENTS
+      // ------------------------------------------
+
+      const dayInvestment = weeklyInvestments
+        .filter((investment) => {
+          const investmentDate = new Date(
+            investment.dateTime
           );
 
-      // ------------------------------
-      // DAY EXPENSE
-      // ------------------------------
-
-      const dayExpense =
-        weeklySales
-          .filter((sale) => {
-            const saleDate =
-              new Date(sale.date);
-
-            return (
-              saleDate >= dayStart &&
-              saleDate <= dayEnd
-            );
-          })
-          .reduce(
-            (total, sale) =>
-              total +
-              Number(sale.expense),
-            0
+          return (
+            investmentDate >= dayStart &&
+            investmentDate <= dayEnd
           );
-
-      // ------------------------------
-      // DAY INVESTMENT
-      // ------------------------------
-
-      const dayInvestment =
-        weeklyInvestments
-          .filter((investment) => {
-            const investmentDate =
-              new Date(
-                investment.dateTime
-              );
-
-            return (
-              investmentDate >= dayStart &&
-              investmentDate <= dayEnd
-            );
-          })
-          .reduce(
-            (total, investment) => {
-              const amount =
-                Number(investment.rate) *
-                Number(investment.quantity);
-
-              return total + amount;
-            },
-            0
-          );
+        })
+        .reduce(
+          (total, investment) =>
+            total +
+            calculateInvestment(
+              investment.rate,
+              investment.quantity
+            ),
+          0
+        );
 
       chartData.push({
-        date: date
-          .toISOString()
-          .split("T")[0],
+        date: date.toISOString().split("T")[0],
 
-        day: date.toLocaleDateString(
-          "en-US",
-          {
-            weekday: "short",
-          }
-        ),
+        day: date.toLocaleDateString("en-US", {
+          weekday: "short",
+        }),
 
         sales: formatMoney(daySales),
 
         expense: formatMoney(dayExpense),
 
-        investment:
-          formatMoney(dayInvestment),
+        investment: formatMoney(dayInvestment),
       });
     }
 
@@ -308,13 +306,12 @@ export async function GET() {
     // RECENT SALES
     // ==========================================
 
-    const recentSales =
-      await prisma.sale.findMany({
-        orderBy: {
-          date: "desc",
-        },
-        take: 5,
-      });
+    const recentSales = await prisma.sale.findMany({
+      orderBy: {
+        date: "desc",
+      },
+      take: 5,
+    });
 
     // ==========================================
     // RESPONSE
@@ -322,95 +319,62 @@ export async function GET() {
 
     return NextResponse.json({
       stats: {
-        todaySales:
-          formatMoney(todaySalesAmount),
+        todaySales: formatMoney(todaySalesAmount),
 
-        todayExpense:
-          formatMoney(todayExpense),
+        todayExpense: formatMoney(todayExpense),
 
-        totalCredit:
-          formatMoney(totalCredit),
+        totalExpense: formatMoney(totalExpense),
 
-        totalInvestment:
-          formatMoney(totalInvestment),
+        totalCredit: formatMoney(totalCredit),
 
-        todayInvestment:
-          formatMoney(
-            todayInvestmentAmount
-          ),
+        totalInvestment: formatMoney(totalInvestment),
 
-        unpaidVendorBills:
-          formatMoney(
-            unpaidVendorAmount
-          ),
+        todayInvestment: formatMoney(
+          todayInvestmentAmount
+        ),
 
-        transactions:
-          todaySales.length,
+        unpaidVendorBills: formatMoney(
+          unpaidVendorAmount
+        ),
 
-        creditCustomers:
-          creditCustomers.length,
+        transactions: todaySales.length,
 
-        pendingBills:
-          unpaidVendorBills.length,
+        creditCustomers: creditCustomers.length,
+
+        pendingBills: unpaidVendorBills.length,
       },
 
-      // ========================================
-      // BAR CHART
-      // ========================================
-
       chartData,
-
-      // ========================================
-      // PIE CHART
-      // ========================================
 
       pieData: [
         {
           id: 0,
-          value:
-            formatMoney(
-              todaySalesAmount
-            ),
+          value: formatMoney(todaySalesAmount),
           label: "Sales",
         },
-
         {
           id: 1,
-          value:
-            formatMoney(todayExpense),
+          value: formatMoney(todayExpense),
           label: "Expense",
         },
-
         {
           id: 2,
-          value:
-            formatMoney(
-              todayInvestmentAmount
-            ),
+          value: formatMoney(todayInvestmentAmount),
           label: "Investment",
         },
       ],
 
-      // ========================================
-      // RECENT SALES
-      // ========================================
+      recentSales: recentSales.map((sale) => ({
+        id: sale.id,
 
-      recentSales:
-        recentSales.map((sale) => ({
-          id: sale.id,
+        date: sale.date.toISOString(),
 
-          date: sale.date,
+        amount: formatMoney(
+          Number(sale.saleAmount)
+        ),
 
-          amount:
-            formatMoney(
-              Number(
-                sale.saleAmount
-              )
-            ),
-
-          paymentMethod:
-            sale.paymentMethod,
-        })),
+        paymentMethod: sale.paymentMethod,
+      })),
     });
   } catch (error) {
     console.error(
@@ -420,8 +384,7 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error:
-          "Failed to load dashboard data",
+        error: "Failed to load dashboard data",
       },
       {
         status: 500,
