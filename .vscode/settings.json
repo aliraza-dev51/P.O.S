@@ -1,0 +1,6 @@
+{
+    "QoderCN.localMachineModel": true,
+    "QoderCN.aI Chat.mcpToolsInAgentMode": true,
+    "deepseek-copilot.baseUrl": "https://api.deepseek.comsk-4c5c6278ec494da384484b30e2788e7f",
+    "deepseek-copilot.experimental.stabilizeToolList": true
+}

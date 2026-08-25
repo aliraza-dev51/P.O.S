@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PaymentMethod {
+  CASH
+  ONLINE
+}
+
+enum OnlineAccount {
+  EASYPAISA
+  BANK_ISLAMI
+}
+
+enum VendorStatus {
+  PAID
+  UNPAID
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  OFF
+  HALF_DAY
+  LATE
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+}
+
+model Employee {
+  id          Int      @id @default(autoincrement())
+  name        String
+  phone       String?
+  cnic        String?
+  designation String
+  salary      Decimal  @db.Decimal(12, 2)
+  joiningDate DateTime
+  image       String?
+
+  attendance Attendance[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("employees")
+}
+
+model Customer {
+  id   Int    @id @default(autoincrement())
+  name String
+
+  @@map("customers")
+}
+
+model Attendance {
+  id         Int              @id @default(autoincrement())
+  employeeId Int
+  date       DateTime
+  inTime     String?
+  outTime    String?
+  status     AttendanceStatus
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([date])
+  @@map("attendance")
+}
+
+model GroceryItem {
+  id             Int     @id @default(autoincrement())
+  itemName       String
+  weight         Decimal @db.Decimal(12, 3)
+  quantity       Int
+  rate           Decimal @db.Decimal(12, 2)
+  transportation Decimal @db.Decimal(12, 2)
+  sellingPrice   Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("grocery_items")
+}
+
+model Sale {
+  id            Int            @id @default(autoincrement())
+  date          DateTime
+  openingAmount Decimal        @db.Decimal(12, 2)
+  expense       Decimal        @default(0) @db.Decimal(12, 2)
+  saleAmount    Decimal        @db.Decimal(12, 2)
+  paymentMethod PaymentMethod
+  onlineAccount OnlineAccount?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@map("sales")
+}
+
+model CreditCustomer {
+  id              Int     @id @default(autoincrement())
+  personName      String
+  previousBalance Decimal @default(0) @db.Decimal(12, 2)
+  currentAmount   Decimal @default(0) @db.Decimal(12, 2)
+  paidAmount      Decimal @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([personName])
+  @@map("credit_customers")
+}
+
+model VendorBill {
+  id         Int          @id @default(autoincrement())
+  dateTime   DateTime     @default(now())
+  vendorName String
+  billAmount Decimal      @db.Decimal(12, 2)
+  status     VendorStatus @default(UNPAID)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dateTime])
+  @@index([status])
+  @@map("vendor_bills")
+}
+
+model Investment {
+  id              Int      @id @default(autoincrement())
+  dateTime        DateTime @default(now())
+  itemName        String
+  weight          Decimal  @db.Decimal(12, 3)
+  quantity        Int
+  quantityPerPack Int
+  rate            Decimal  @db.Decimal(12, 2)
+  marketRate      Decimal  @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dateTime])
+  @@map("investments")
+}
+
+model Settings {
+  id               Int     @id @default(autoincrement())
+  storeName        String  @default("My Store")
+  phone            String?
+  address          String?
+  currency         String  @default("PKR")
+  taxRate          Decimal @default(0) @db.Decimal(5, 2)
+  invoicePrefix    String  @default("INV-")
+  invoiceFooter    String  @default("Thank you for shopping with us.")
+  workStartTime    String  @default("09:00")
+  workEndTime      String  @default("18:00")
+  lateAfterMinutes Int     @default(15)
+  compactMode      Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model User {
+  id            Int      @id @default(autoincrement())
+  name          String
+  email         String   @unique
+  password      String
+  role          UserRole @default(STAFF)
+  phone         String?
+  image         String?
+  emailVerified DateTime?
+
+  accounts Account[]
+  sessions Session[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Account {
+  id                Int     @id @default(autoincrement())
+  userId            Int
+
+  type              String
+  provider          String
+  providerAccountId String
+
+  refresh_token String? @db.Text
+  access_token  String? @db.Text
+  expires_at    Int?
+  token_type    String?
+  scope         String?
+  id_token      String? @db.Text
+  session_state String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           Int      @id @default(autoincrement())
+  sessionToken String   @unique
+  userId       Int
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
