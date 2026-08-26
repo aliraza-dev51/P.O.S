@@ -601,12 +601,7 @@ export default function SellPage() {
                 )}
               </Typography>
 
-              <Typography
-                variant="caption"
-                color="text.secondary"
-              >
-                From Vendors
-              </Typography>
+              
             </CardContent>
           </Card>
         </Grid>
