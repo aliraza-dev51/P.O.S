@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   Add,
@@ -24,6 +24,7 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -33,7 +34,6 @@ import {
   IconButton,
   MenuItem,
   Paper,
-  Select,
   Stack,
   Table,
   TableBody,
@@ -55,7 +55,7 @@ type OnlineAccount = "EasyPaisa" | "Bank Islami";
 
 type Sale = {
   id: number;
-  salesMonthId: number;
+  salesMonthId?: number;
   date: string;
   openingAmount: number;
   expense: number;
@@ -72,33 +72,67 @@ type SalesMonth = {
   closingBalance: number | null;
   isClosed: boolean;
   closedAt: string | null;
+  salesCount?: number;
 };
 
 type ApiResponse = {
-  sales?: Sale[];
-  month?: SalesMonth;
-  months?: SalesMonth[];
-  vendorExpense?: number;
+  success?: boolean;
   error?: string;
+
+  sales?: Sale[];
+
+  activeMonth?: SalesMonth | null;
+
+  /*
+   * Some older versions of your API used `month`
+   * instead of `activeMonth`, so this page accepts both.
+   */
+  month?: SalesMonth | null;
+
+  vendorExpense?: number;
+
+  totalSales?: number;
+
+  currentBalance?: number;
+
+  history?: SalesMonth[];
+
+  months?: SalesMonth[];
+
+  closedMonth?: SalesMonth;
+
+  newMonth?: SalesMonth;
 };
 
 /* =========================================================
-   EMPTY FORM
+   FORM
 ========================================================= */
 
-const emptyForm = {
-  date: "",
+type SaleForm = {
+  date: string;
+  openingAmount: string;
+  saleAmount: string;
+  paymentMethod: PaymentMethod;
+  onlineAccount: OnlineAccount | "";
+};
+
+const getToday = () => {
+  return new Date().toISOString().split("T")[0];
+};
+
+const createEmptyForm = (): SaleForm => ({
+  date: getToday(),
   openingAmount: "",
   saleAmount: "",
-  paymentMethod: "Cash" as PaymentMethod,
-  onlineAccount: "" as OnlineAccount | "",
-};
+  paymentMethod: "Cash",
+  onlineAccount: "",
+});
 
 /* =========================================================
    HELPERS
 ========================================================= */
 
-const getCurrentMonth = () => {
+const getCalendarMonth = () => {
   const now = new Date();
 
   return {
@@ -107,30 +141,45 @@ const getCurrentMonth = () => {
   };
 };
 
-const formatMonth = (month: number, year: number) => {
-  return new Date(year, month - 1, 1).toLocaleDateString(
-    "en-US",
-    {
-      month: "long",
-      year: "numeric",
-    }
-  );
+const formatMonth = (
+  month: number,
+  year: number
+) => {
+  return new Date(
+    year,
+    month - 1,
+    1
+  ).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
 };
 
-const formatDate = (date: string) => {
-  if (!date) return "-";
-
-  const parsed = new Date(date);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return date;
+const formatDate = (value: string) => {
+  if (!value) {
+    return "-";
   }
 
-  return parsed.toLocaleDateString("en-PK", {
+  const date = new Date(`${value}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString("en-PK", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
+};
+
+const formatPrice = (value: number) => {
+  return `Rs. ${Number(value || 0).toLocaleString(
+    "en-PK",
+    {
+      maximumFractionDigits: 2,
+    }
+  )}`;
 };
 
 /* =========================================================
@@ -142,18 +191,18 @@ export default function SellPage() {
      MONTH
   ======================================================= */
 
-  const initialMonth = getCurrentMonth();
+  const initialMonth = getCalendarMonth();
 
   const [selectedMonth, setSelectedMonth] =
-    useState(initialMonth.month);
+    useState<number>(initialMonth.month);
 
   const [selectedYear, setSelectedYear] =
-    useState(initialMonth.year);
+    useState<number>(initialMonth.year);
 
-  const [currentMonth, setCurrentMonth] =
+  const [activeMonth, setActiveMonth] =
     useState<SalesMonth | null>(null);
 
-  const [months, setMonths] =
+  const [history, setHistory] =
     useState<SalesMonth[]>([]);
 
   /* =======================================================
@@ -164,179 +213,238 @@ export default function SellPage() {
     useState<Sale[]>([]);
 
   const [vendorExpense, setVendorExpense] =
-    useState(0);
+    useState<number>(0);
 
   /* =======================================================
-     UI STATES
+     UI
   ======================================================= */
 
   const [loading, setLoading] =
-    useState(false);
+    useState<boolean>(true);
 
   const [saving, setSaving] =
-    useState(false);
+    useState<boolean>(false);
+
+  const [deletingId, setDeletingId] =
+    useState<number | null>(null);
 
   const [closingMonth, setClosingMonth] =
-    useState(false);
+    useState<boolean>(false);
 
   const [error, setError] =
-    useState("");
+    useState<string>("");
 
-  const [open, setOpen] =
-    useState(false);
+  const [openDialog, setOpenDialog] =
+    useState<boolean>(false);
 
-  const [closeDialogOpen, setCloseDialogOpen] =
-    useState(false);
+  const [closeDialog, setCloseDialog] =
+    useState<boolean>(false);
 
   const [editingId, setEditingId] =
     useState<number | null>(null);
 
   const [form, setForm] =
-    useState(emptyForm);
+    useState<SaleForm>(
+      createEmptyForm()
+    );
 
   /* =======================================================
-     FORMAT PRICE
+     IMPORTANT
+     
+     Existing /api/sales returns the active month.
+     Therefore the page loads that endpoint directly.
   ======================================================= */
 
-  const formatPrice = (value: number) => {
-    return `Rs. ${Number(value || 0).toLocaleString("en-PK", {
-      maximumFractionDigits: 2,
-    })}`;
-  };
+  const loadSales = useCallback(
+    async () => {
+      setLoading(true);
+      setError("");
 
-  /* =======================================================
-     LOAD MONTHS
-  ======================================================= */
-
-  const loadMonths = async () => {
-    try {
-      const response = await fetch(
-        "/api/sales/months",
-        {
-          method: "GET",
-          cache: "no-store",
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          "Unable to load sales months."
+      try {
+        const response = await fetch(
+          "/api/sales",
+          {
+            method: "GET",
+            cache: "no-store",
+          }
         );
-      }
 
-      const data: ApiResponse =
-        await response.json();
+        const data: ApiResponse =
+          await response.json();
 
-      setMonths(data.months ?? []);
-    } catch (err) {
-      console.error(
-        "Unable to load months:",
-        err
-      );
-    }
-  };
-
-  /* =======================================================
-     LOAD SELECTED MONTH
-  ======================================================= */
-
-  const loadSales = async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const response = await fetch(
-        `/api/sales?month=${selectedMonth}&year=${selectedYear}`,
-        {
-          method: "GET",
-          cache: "no-store",
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+              "Unable to load sales."
+          );
         }
-      );
 
-      const data: ApiResponse =
-        await response.json();
+        const month =
+          data.activeMonth ??
+          data.month ??
+          null;
 
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to load sales."
+        setSales(data.sales ?? []);
+
+        setVendorExpense(
+          Number(
+            data.vendorExpense ?? 0
+          )
         );
+
+        setHistory(
+          data.history ??
+            data.months ??
+            []
+        );
+
+        setActiveMonth(month);
+
+        /*
+         * If backend returned a month,
+         * sync the selector with it.
+         */
+        if (month) {
+          setSelectedMonth(
+            month.month
+          );
+
+          setSelectedYear(
+            month.year
+          );
+        }
+      } catch (err) {
+        console.error(
+          "SellPage load error:",
+          err
+        );
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load sales."
+        );
+
+        setSales([]);
+        setHistory([]);
+        setActiveMonth(null);
+        setVendorExpense(0);
+      } finally {
+        setLoading(false);
       }
-
-      setSales(data.sales ?? []);
-      setVendorExpense(
-        Number(data.vendorExpense ?? 0)
-      );
-
-      if (data.month) {
-        setCurrentMonth(data.month);
-      } else {
-        setCurrentMonth(null);
-      }
-    } catch (err) {
-      console.error(
-        "Unable to load sales:",
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load sales."
-      );
-
-      setSales([]);
-      setCurrentMonth(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    []
+  );
 
   /* =======================================================
-     LOAD DATA
+     INITIAL LOAD
   ======================================================= */
 
   useEffect(() => {
-    loadMonths();
-  }, []);
-
-  useEffect(() => {
-    loadSales();
-  }, [selectedMonth, selectedYear]);
+    void loadSales();
+  }, [loadSales]);
 
   /* =======================================================
      REFRESH
   ======================================================= */
 
-  const refreshAll = async () => {
-    await Promise.all([
-      loadSales(),
-      loadMonths(),
-    ]);
+  const refreshPage = async () => {
+    await loadSales();
   };
 
   /* =======================================================
-     MONTH SELECT
+     MONTH STATUS
   ======================================================= */
 
-  const handleMonthChange = (
-    value: string
+  const isClosed =
+    activeMonth?.isClosed === true;
+
+  const calendarMonth =
+    getCalendarMonth();
+
+  const isCurrentCalendarMonth =
+    selectedMonth ===
+      calendarMonth.month &&
+    selectedYear ===
+      calendarMonth.year;
+
+  /* =======================================================
+     TOTALS
+  ======================================================= */
+
+  const openingBalance = useMemo(() => {
+    if (activeMonth) {
+      return Number(
+        activeMonth.openingBalance || 0
+      );
+    }
+
+    if (sales.length > 0) {
+      return Number(
+        sales[0].openingAmount || 0
+      );
+    }
+
+    return 0;
+  }, [activeMonth, sales]);
+
+  const totalSales = useMemo(() => {
+    return sales.reduce(
+      (
+        total: number,
+        sale: Sale
+      ) => {
+        return (
+          total +
+          Number(
+            sale.saleAmount || 0
+          )
+        );
+      },
+      0
+    );
+  }, [sales]);
+
+  const calculatedClosing =
+    openingBalance +
+    totalSales -
+    vendorExpense;
+
+  const closingBalance =
+    activeMonth?.closingBalance !==
+      null &&
+    activeMonth?.closingBalance !==
+      undefined
+      ? Number(
+          activeMonth.closingBalance
+        )
+      : calculatedClosing;
+
+  /* =======================================================
+     SALE BALANCE
+  ======================================================= */
+
+  const getSaleBalance = (
+    index: number
   ) => {
-    const [year, month] =
-      value.split("-").map(Number);
+    let balance = openingBalance;
 
-    setSelectedYear(year);
-    setSelectedMonth(month);
+    for (
+      let i = 0;
+      i <= index;
+      i += 1
+    ) {
+      balance += Number(
+        sales[i]?.saleAmount || 0
+      );
+
+      balance -= Number(
+        sales[i]?.expense || 0
+      );
+    }
+
+    return balance;
   };
-
-  /* =======================================================
-     CURRENT MONTH VALUE
-  ======================================================= */
-
-  const monthSelectValue =
-    `${selectedYear}-${String(
-      selectedMonth
-    ).padStart(2, "0")}`;
 
   /* =======================================================
      MONTH NAVIGATION
@@ -348,11 +456,12 @@ export default function SellPage() {
       setSelectedYear(
         selectedYear - 1
       );
-    } else {
-      setSelectedMonth(
-        selectedMonth - 1
-      );
+      return;
     }
+
+    setSelectedMonth(
+      selectedMonth - 1
+    );
   };
 
   const goNextMonth = () => {
@@ -361,194 +470,110 @@ export default function SellPage() {
       setSelectedYear(
         selectedYear + 1
       );
-    } else {
-      setSelectedMonth(
-        selectedMonth + 1
-      );
+      return;
     }
+
+    setSelectedMonth(
+      selectedMonth + 1
+    );
   };
 
   /* =======================================================
-     IS CURRENT CALENDAR MONTH
+     HISTORY VIEW
+     
+     IMPORTANT:
+     Existing /api/sales GET returns the active month,
+     not arbitrary historical month sales.
+     
+     So history rows are used for navigation/status only.
   ======================================================= */
 
-  const calendarMonth =
-    getCurrentMonth();
+  const viewHistoryMonth = (
+    month: SalesMonth
+  ) => {
+    setSelectedMonth(
+      month.month
+    );
 
-  const isCurrentCalendarMonth =
-    selectedMonth ===
-      calendarMonth.month &&
-    selectedYear ===
-      calendarMonth.year;
+    setSelectedYear(
+      month.year
+    );
 
-  /* =======================================================
-     MONTH CLOSED
-  ======================================================= */
-
-  const isMonthClosed =
-    currentMonth?.isClosed ?? false;
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
 
   /* =======================================================
      FORM CHANGE
   ======================================================= */
 
-  const handleChange = (
-    field: keyof typeof emptyForm,
+  const updateForm = (
+    field: keyof SaleForm,
     value: string
   ) => {
-    setForm((previous) => ({
-      ...previous,
-      [field]: value,
-    }));
-  };
-
-  /* =======================================================
-     TOTALS
-  ======================================================= */
-
-  const totalSale = useMemo(() => {
-    return sales.reduce(
-      (total, sale) =>
-        total +
-        Number(sale.saleAmount || 0),
-      0
-    );
-  }, [sales]);
-
-  const totalExpense = useMemo(() => {
-    return vendorExpense;
-  }, [vendorExpense]);
-
-  const openingBalance = useMemo(() => {
-    if (currentMonth) {
-      return Number(
-        currentMonth.openingBalance || 0
-      );
-    }
-
-    if (sales.length > 0) {
-      return Number(
-        sales[0].openingAmount || 0
-      );
-    }
-
-    return 0;
-  }, [currentMonth, sales]);
-
-  const calculatedClosingBalance =
-    openingBalance +
-    totalSale -
-    totalExpense;
-
-  const displayedClosingBalance =
-    currentMonth?.closingBalance !== null &&
-    currentMonth?.closingBalance !== undefined
-      ? Number(
-          currentMonth.closingBalance
-        )
-      : calculatedClosingBalance;
-
-  /* =======================================================
-     GET SALE BALANCE
-  ======================================================= */
-
-  const getSaleBalance = (
-    sale: Sale,
-    index: number
-  ) => {
-    const previousSales =
-      sales.slice(0, index);
-
-    const previousSalesTotal =
-      previousSales.reduce(
-        (total, item) =>
-          total +
-          Number(item.saleAmount || 0),
-        0
-      );
-
-    const previousExpense =
-      previousSales.reduce(
-        (total, item) =>
-          total +
-          Number(item.expense || 0),
-        0
-      );
-
-    return (
-      openingBalance +
-      previousSalesTotal +
-      Number(sale.saleAmount || 0) -
-      previousExpense -
-      Number(sale.expense || 0)
+    setForm(
+      (previous) => ({
+        ...previous,
+        [field]: value,
+      })
     );
   };
 
   /* =======================================================
-     OPEN ADD MODAL
+     OPEN ADD
   ======================================================= */
 
-  const openAddModal = () => {
-    if (!currentMonth) {
+  const openAddSale = () => {
+    if (isClosed) {
       alert(
-        "This month has not been created yet."
+        "This month is closed. You cannot add a sale."
       );
       return;
     }
 
-    if (isMonthClosed) {
-      alert(
-        "This month is closed. You cannot add new sales."
-      );
-      return;
-    }
-
-    setEditingId(null);
-
-    const lastSale =
-      sales.length > 0
-        ? sales[sales.length - 1]
-        : null;
+    /*
+     * DO NOT check `!activeMonth` here.
+     *
+     * Your POST /api/sales already creates the
+     * missing month automatically.
+     */
 
     let nextOpening =
       openingBalance;
 
-    if (lastSale) {
+    if (sales.length > 0) {
       nextOpening =
         getSaleBalance(
-          lastSale,
           sales.length - 1
         );
     }
 
-    setForm({
-      date: new Date()
-        .toISOString()
-        .split("T")[0],
+    setEditingId(null);
 
+    setForm({
+      date: getToday(),
       openingAmount:
         String(nextOpening),
-
       saleAmount: "",
-
       paymentMethod: "Cash",
-
       onlineAccount: "",
     });
 
-    setOpen(true);
+    setOpenDialog(true);
   };
 
   /* =======================================================
-     OPEN EDIT MODAL
+     OPEN EDIT
   ======================================================= */
 
-  const openEditModal = (
+  const openEditSale = (
     sale: Sale
   ) => {
-    if (isMonthClosed) {
+    if (isClosed) {
       alert(
-        "This month is closed. You cannot edit its sales."
+        "This month is closed. You cannot edit sales."
       );
       return;
     }
@@ -556,15 +581,19 @@ export default function SellPage() {
     setEditingId(sale.id);
 
     setForm({
-      date: sale.date.includes("T")
+      date: sale.date
         ? sale.date.split("T")[0]
-        : sale.date,
+        : getToday(),
 
       openingAmount:
-        String(sale.openingAmount),
+        String(
+          sale.openingAmount
+        ),
 
       saleAmount:
-        String(sale.saleAmount),
+        String(
+          sale.saleAmount
+        ),
 
       paymentMethod:
         sale.paymentMethod,
@@ -573,23 +602,23 @@ export default function SellPage() {
         sale.onlineAccount,
     });
 
-    setOpen(true);
+    setOpenDialog(true);
   };
 
   /* =======================================================
-     CLOSE MODAL
+     CLOSE SALE DIALOG
   ======================================================= */
 
-  const closeModal = () => {
-    setOpen(false);
-    setEditingId(null);
+  const closeSaleDialog = () => {
+    if (saving) {
+      return;
+    }
 
-    setForm({
-      ...emptyForm,
-      date: new Date()
-        .toISOString()
-        .split("T")[0],
-    });
+    setOpenDialog(false);
+    setEditingId(null);
+    setForm(
+      createEmptyForm()
+    );
   };
 
   /* =======================================================
@@ -597,9 +626,9 @@ export default function SellPage() {
   ======================================================= */
 
   const saveSale = async () => {
-    if (isMonthClosed) {
+    if (isClosed) {
       alert(
-        "This month is already closed."
+        "This month is closed."
       );
       return;
     }
@@ -607,13 +636,19 @@ export default function SellPage() {
     const date = form.date;
 
     const openingAmount =
-      Number(form.openingAmount);
+      Number(
+        form.openingAmount
+      );
 
     const saleAmount =
-      Number(form.saleAmount);
+      Number(
+        form.saleAmount
+      );
 
     if (!date) {
-      alert("Please select date.");
+      alert(
+        "Please select a date."
+      );
       return;
     }
 
@@ -657,8 +692,6 @@ export default function SellPage() {
     try {
       const payload = {
         date,
-        month: selectedMonth,
-        year: selectedYear,
 
         openingAmount,
 
@@ -684,19 +717,19 @@ export default function SellPage() {
           ? "POST"
           : "PUT";
 
-      const response = await fetch(
-        url,
-        {
+      const response =
+        await fetch(url, {
           method,
+
           headers: {
             "Content-Type":
               "application/json",
           },
+
           body: JSON.stringify(
             payload
           ),
-        }
-      );
+        });
 
       const data: ApiResponse =
         await response.json();
@@ -704,16 +737,20 @@ export default function SellPage() {
       if (!response.ok) {
         throw new Error(
           data.error ||
-            "Failed to save sale."
+            "Unable to save sale."
         );
       }
 
-      await refreshAll();
+      setOpenDialog(false);
+      setEditingId(null);
+      setForm(
+        createEmptyForm()
+      );
 
-      closeModal();
+      await loadSales();
     } catch (err) {
       console.error(
-        "Unable to save sale:",
+        "Save sale error:",
         err
       );
 
@@ -734,7 +771,7 @@ export default function SellPage() {
   const deleteSale = async (
     id: number
   ) => {
-    if (isMonthClosed) {
+    if (isClosed) {
       alert(
         "This month is closed. You cannot delete sales."
       );
@@ -750,13 +787,16 @@ export default function SellPage() {
       return;
     }
 
+    setDeletingId(id);
+
     try {
-      const response = await fetch(
-        `/api/sales/${id}`,
-        {
-          method: "DELETE",
-        }
-      );
+      const response =
+        await fetch(
+          `/api/sales/${id}`,
+          {
+            method: "DELETE",
+          }
+        );
 
       const data: ApiResponse =
         await response.json();
@@ -764,14 +804,14 @@ export default function SellPage() {
       if (!response.ok) {
         throw new Error(
           data.error ||
-            "Failed to delete sale."
+            "Unable to delete sale."
         );
       }
 
-      await refreshAll();
+      await loadSales();
     } catch (err) {
       console.error(
-        "Unable to delete sale:",
+        "Delete sale error:",
         err
       );
 
@@ -780,92 +820,88 @@ export default function SellPage() {
           ? err.message
           : "Unable to delete sale."
       );
+    } finally {
+      setDeletingId(null);
     }
   };
 
   /* =======================================================
      CLOSE MONTH
+     
+     Existing backend supports:
+     POST /api/sales/months/:id/close
   ======================================================= */
 
-  const closeCurrentMonth = async () => {
-    if (!currentMonth) {
-      return;
-    }
-
-    if (currentMonth.isClosed) {
-      return;
-    }
-
-    setClosingMonth(true);
-
-    try {
-      const response = await fetch(
-        `/api/sales/months/${currentMonth.id}/close`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-        }
-      );
-
-      const data: ApiResponse =
-        await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to close month."
+  const closeCurrentMonth =
+    async () => {
+      if (!activeMonth) {
+        alert(
+          "There is no active sales month to close."
         );
+        return;
       }
 
-      setCloseDialogOpen(false);
-
-      await refreshAll();
-    } catch (err) {
-      console.error(
-        "Unable to close month:",
-        err
-      );
-
-      alert(
-        err instanceof Error
-          ? err.message
-          : "Unable to close month."
-      );
-    } finally {
-      setClosingMonth(false);
-    }
-  };
-
-  /* =======================================================
-     PREVIOUS MONTHS
-  ======================================================= */
-
-  const sortedMonths = useMemo(() => {
-    return [...months].sort(
-      (a, b) => {
-        const aValue =
-          a.year * 100 + a.month;
-
-        const bValue =
-          b.year * 100 + b.month;
-
-        return bValue - aValue;
+      if (activeMonth.isClosed) {
+        return;
       }
-    );
-  }, [months]);
+
+      setClosingMonth(true);
+
+      try {
+        const response =
+          await fetch(
+            `/api/sales/months/${activeMonth.id}/close`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+            }
+          );
+
+        const data: ApiResponse =
+          await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+              "Unable to close month."
+          );
+        }
+
+        setCloseDialog(false);
+
+        await loadSales();
+      } catch (err) {
+        console.error(
+          "Close month error:",
+          err
+        );
+
+        alert(
+          err instanceof Error
+            ? err.message
+            : "Unable to close month."
+        );
+      } finally {
+        setClosingMonth(false);
+      }
+    };
 
   /* =======================================================
-     LIVE FORM PREVIEW
+     LIVE FORM VALUES
   ======================================================= */
 
   const liveOpening =
-    Number(form.openingAmount) || 0;
+    Number(
+      form.openingAmount
+    ) || 0;
 
   const liveSale =
-    Number(form.saleAmount) || 0;
+    Number(
+      form.saleAmount
+    ) || 0;
 
   const liveBalance =
     liveOpening +
@@ -873,21 +909,52 @@ export default function SellPage() {
     vendorExpense;
 
   /* =======================================================
-     UI
+     HISTORY
+  ======================================================= */
+
+  const sortedHistory =
+    useMemo(() => {
+      return [
+        ...history,
+      ].sort(
+        (
+          a: SalesMonth,
+          b: SalesMonth
+        ) => {
+          const aValue =
+            a.year * 100 +
+            a.month;
+
+          const bValue =
+            b.year * 100 +
+            b.month;
+
+          return (
+            bValue - aValue
+          );
+        }
+      );
+    }, [history]);
+
+  /* =======================================================
+     RENDER
   ======================================================= */
 
   return (
     <Box
       sx={{
+        minHeight: "100%",
         p: {
           xs: 2,
           md: 4,
         },
+        bgcolor:
+          "background.default",
       }}
     >
-      {/* =================================================
+      {/* ===================================================
           HEADER
-      ================================================= */}
+      =================================================== */}
 
       <Stack
         direction={{
@@ -897,15 +964,12 @@ export default function SellPage() {
         sx={{
           justifyContent:
             "space-between",
-
           alignItems: {
             xs: "flex-start",
             md: "center",
           },
-
           gap: 2,
-
-          mb: 4,
+          mb: 3,
         }}
       >
         <Box>
@@ -913,15 +977,18 @@ export default function SellPage() {
             direction="row"
             spacing={1}
             sx={{
-              alignItems: "center",
+              alignItems:
+                "center",
             }}
           >
-            <PointOfSale color="primary" />
+            <PointOfSale
+              color="primary"
+            />
 
             <Typography
               variant="h4"
               sx={{
-                fontWeight: 700,
+                fontWeight: 800,
               }}
             >
               Sales
@@ -935,8 +1002,9 @@ export default function SellPage() {
               mt: 0.5,
             }}
           >
-            Manage monthly sales,
-            expenses and closing balances
+            Manage daily sales,
+            expenses and monthly
+            balances
           </Typography>
         </Box>
 
@@ -956,188 +1024,49 @@ export default function SellPage() {
           <Button
             variant="outlined"
             startIcon={<Refresh />}
-            onClick={refreshAll}
+            onClick={
+              refreshPage
+            }
             disabled={loading}
+            fullWidth={
+              false
+            }
           >
             Refresh
           </Button>
 
-          {!isMonthClosed && (
-            <Button
-              variant="outlined"
-              color="warning"
-              startIcon={<Lock />}
-              onClick={() =>
-                setCloseDialogOpen(
-                  true
-                )
-              }
-              disabled={
-                !currentMonth ||
-                loading
-              }
-            >
-              Close Month
-            </Button>
-          )}
+          <Button
+            variant="outlined"
+            color="warning"
+            startIcon={<Lock />}
+            onClick={() =>
+              setCloseDialog(true)
+            }
+            disabled={
+              loading ||
+              !activeMonth ||
+              isClosed
+            }
+          >
+            Close Month
+          </Button>
 
           <Button
             variant="contained"
             startIcon={<Add />}
-            onClick={openAddModal}
-            disabled={
-              !currentMonth ||
-              isMonthClosed
+            onClick={
+              openAddSale
             }
+            disabled={isClosed}
           >
             Add Sale
           </Button>
         </Stack>
       </Stack>
 
-      {/* =================================================
-          MONTH SELECTOR
-      ================================================= */}
-
-      <Paper
-        elevation={0}
-        sx={{
-          mb: 3,
-          p: 2,
-          border: "1px solid",
-          borderColor:
-            "divider",
-          borderRadius: 3,
-        }}
-      >
-        <Stack
-          direction={{
-            xs: "column",
-            sm: "row",
-          }}
-          sx={{
-            justifyContent:
-              "space-between",
-            alignItems: {
-              xs: "stretch",
-              sm: "center",
-            },
-            gap: 2,
-          }}
-        >
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{
-              alignItems:
-                "center",
-            }}
-          >
-            <IconButton
-              onClick={
-                goPreviousMonth
-              }
-              size="small"
-            >
-              <ArrowBackIosNew fontSize="small" />
-            </IconButton>
-
-            <CalendarMonth
-              color="primary"
-            />
-
-            <Typography
-              variant="h6"
-              sx={{
-                fontWeight: 700,
-              }}
-            >
-              {formatMonth(
-                selectedMonth,
-                selectedYear
-              )}
-            </Typography>
-
-            <IconButton
-              onClick={
-                goNextMonth
-              }
-              size="small"
-            >
-              <ArrowForwardIos fontSize="small" />
-            </IconButton>
-
-            {isCurrentCalendarMonth && (
-              <Chip
-                size="small"
-                color="primary"
-                label="Current"
-              />
-            )}
-
-            {isMonthClosed && (
-              <Chip
-                size="small"
-                color="default"
-                icon={<Lock />}
-                label="Closed"
-              />
-            )}
-          </Stack>
-
-          <Select
-            size="small"
-            value={
-              monthSelectValue
-            }
-            onChange={(event) =>
-              handleMonthChange(
-                event.target.value
-              )
-            }
-            sx={{
-              minWidth: 220,
-            }}
-          >
-            {sortedMonths.length >
-            0 ? (
-              sortedMonths.map(
-                (month) => (
-                  <MenuItem
-                    key={month.id}
-                    value={`${month.year}-${String(
-                      month.month
-                    ).padStart(2, "0")}`}
-                  >
-                    {formatMonth(
-                      month.month,
-                      month.year
-                    )}
-                    {month.isClosed
-                      ? " — Closed"
-                      : " — Open"}
-                  </MenuItem>
-                )
-              )
-            ) : (
-              <MenuItem
-                value={
-                  monthSelectValue
-                }
-              >
-                {formatMonth(
-                  selectedMonth,
-                  selectedYear
-                )}
-              </MenuItem>
-            )}
-          </Select>
-        </Stack>
-      </Paper>
-
-      {/* =================================================
+      {/* ===================================================
           ERROR
-      ================================================= */}
+      =================================================== */}
 
       {error && (
         <Alert
@@ -1160,30 +1089,136 @@ export default function SellPage() {
         </Alert>
       )}
 
-      {/* =================================================
-          CLOSED ALERT
-      ================================================= */}
+      {/* ===================================================
+          MONTH BAR
+      =================================================== */}
 
-      {isMonthClosed && (
-        <Alert
-          severity="success"
-          icon={<Lock />}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 2,
+          mb: 3,
+          border:
+            "1px solid",
+          borderColor:
+            "divider",
+          borderRadius: 3,
+        }}
+      >
+        <Stack
+          direction={{
+            xs: "column",
+            md: "row",
+          }}
           sx={{
-            mb: 3,
+            justifyContent:
+              "space-between",
+            alignItems: {
+              xs: "stretch",
+              md: "center",
+            },
+            gap: 2,
           }}
         >
-          {formatMonth(
-            selectedMonth,
-            selectedYear
-          )}{" "}
-          is closed. This month's
-          records are read-only.
-        </Alert>
-      )}
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{
+              alignItems:
+                "center",
+            }}
+          >
+            <IconButton
+              size="small"
+              onClick={
+                goPreviousMonth
+              }
+            >
+              <ArrowBackIosNew fontSize="small" />
+            </IconButton>
 
-      {/* =================================================
-          SUMMARY
-      ================================================= */}
+            <CalendarMonth
+              color="primary"
+            />
+
+            <Box>
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 700,
+                  lineHeight: 1.2,
+                }}
+              >
+                {formatMonth(
+                  selectedMonth,
+                  selectedYear
+                )}
+              </Typography>
+
+              {isCurrentCalendarMonth && (
+                <Typography
+                  variant="caption"
+                  color="primary"
+                >
+                  Current calendar month
+                </Typography>
+              )}
+            </Box>
+
+            <IconButton
+              size="small"
+              onClick={
+                goNextMonth
+              }
+            >
+              <ArrowForwardIos fontSize="small" />
+            </IconButton>
+          </Stack>
+
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{
+              alignItems:
+                "center",
+              justifyContent:
+                "flex-end",
+            }}
+          >
+            <Chip
+              size="small"
+              icon={
+                isClosed ? (
+                  <Lock />
+                ) : (
+                  <CheckCircle />
+                )
+              }
+              label={
+                isClosed
+                  ? "CLOSED"
+                  : "OPEN"
+              }
+              color={
+                isClosed
+                  ? "default"
+                  : "success"
+              }
+            />
+
+            <Chip
+              size="small"
+              label={`${sales.length} Records`}
+              variant="outlined"
+              color="primary"
+            />
+          </Stack>
+        </Stack>
+      </Paper>
+
+      {/* ===================================================
+          SUMMARY CARDS
+      =================================================== */}
 
       <Grid
         container
@@ -1192,8 +1227,6 @@ export default function SellPage() {
           mb: 3,
         }}
       >
-        {/* OPENING */}
-
         <Grid
           size={{
             xs: 12,
@@ -1204,7 +1237,9 @@ export default function SellPage() {
           <Card
             elevation={0}
             sx={{
-              border: "1px solid",
+              height: "100%",
+              border:
+                "1px solid",
               borderColor:
                 "divider",
               borderRadius: 3,
@@ -1222,7 +1257,7 @@ export default function SellPage() {
                 variant="h5"
                 sx={{
                   mt: 1,
-                  fontWeight: 700,
+                  fontWeight: 800,
                 }}
               >
                 {formatPrice(
@@ -1232,8 +1267,6 @@ export default function SellPage() {
             </CardContent>
           </Card>
         </Grid>
-
-        {/* SALES */}
 
         <Grid
           size={{
@@ -1245,7 +1278,9 @@ export default function SellPage() {
           <Card
             elevation={0}
             sx={{
-              border: "1px solid",
+              height: "100%",
+              border:
+                "1px solid",
               borderColor:
                 "divider",
               borderRadius: 3,
@@ -1263,18 +1298,18 @@ export default function SellPage() {
                 variant="h5"
                 sx={{
                   mt: 1,
-                  fontWeight: 700,
+                  fontWeight: 800,
+                  color:
+                    "primary.main",
                 }}
               >
                 {formatPrice(
-                  totalSale
+                  totalSales
                 )}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-
-        {/* EXPENSE */}
 
         <Grid
           size={{
@@ -1286,7 +1321,9 @@ export default function SellPage() {
           <Card
             elevation={0}
             sx={{
-              border: "1px solid",
+              height: "100%",
+              border:
+                "1px solid",
               borderColor:
                 "divider",
               borderRadius: 3,
@@ -1304,18 +1341,18 @@ export default function SellPage() {
                 variant="h5"
                 sx={{
                   mt: 1,
-                  fontWeight: 700,
+                  fontWeight: 800,
+                  color:
+                    "warning.main",
                 }}
               >
                 {formatPrice(
-                  totalExpense
+                  vendorExpense
                 )}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-
-        {/* CLOSING */}
 
         <Grid
           size={{
@@ -1327,9 +1364,11 @@ export default function SellPage() {
           <Card
             elevation={0}
             sx={{
-              border: "1px solid",
+              height: "100%",
+              border:
+                "1px solid",
               borderColor:
-                displayedClosingBalance >=
+                closingBalance >=
                 0
                   ? "success.main"
                   : "error.main",
@@ -1348,16 +1387,16 @@ export default function SellPage() {
                 variant="h5"
                 sx={{
                   mt: 1,
-                  fontWeight: 700,
+                  fontWeight: 800,
                   color:
-                    displayedClosingBalance >=
+                    closingBalance >=
                     0
                       ? "success.main"
                       : "error.main",
                 }}
               >
                 {formatPrice(
-                  displayedClosingBalance
+                  closingBalance
                 )}
               </Typography>
             </CardContent>
@@ -1365,99 +1404,37 @@ export default function SellPage() {
         </Grid>
       </Grid>
 
-      {/* =================================================
-          MONTH INFO
-      ================================================= */}
+      {/* ===================================================
+          CLOSED MESSAGE
+      =================================================== */}
 
-      <Paper
-        elevation={0}
-        sx={{
-          mb: 3,
-          p: 2,
-          border: "1px solid",
-          borderColor:
-            "divider",
-          borderRadius: 3,
-        }}
-      >
-        <Stack
-          direction={{
-            xs: "column",
-            md: "row",
-          }}
+      {isClosed && (
+        <Alert
+          severity="success"
+          icon={<Lock />}
           sx={{
-            justifyContent:
-              "space-between",
-            alignItems: {
-              xs: "flex-start",
-              md: "center",
-            },
-            gap: 2,
+            mb: 3,
+            borderRadius: 2,
           }}
         >
-          <Box>
-            <Typography
-              sx={{
-                fontWeight: 700,
-              }}
-            >
-              {formatMonth(
-                selectedMonth,
-                selectedYear
-              )}
-            </Typography>
+          {formatMonth(
+            selectedMonth,
+            selectedYear
+          )}{" "}
+          is closed. Its sales are
+          read-only.
+        </Alert>
+      )}
 
-            <Typography
-              variant="body2"
-              color="text.secondary"
-            >
-              {isMonthClosed
-                ? "This month is closed and saved permanently."
-                : "Current month is open for sales."}
-            </Typography>
-          </Box>
-
-          <Stack
-            direction="row"
-            spacing={1}
-          >
-            <Chip
-              label={
-                isMonthClosed
-                  ? "CLOSED"
-                  : "OPEN"
-              }
-              color={
-                isMonthClosed
-                  ? "default"
-                  : "success"
-              }
-              icon={
-                isMonthClosed ? (
-                  <Lock />
-                ) : (
-                  <CheckCircle />
-                )
-              }
-            />
-
-            <Chip
-              label={`${sales.length} Records`}
-              color="primary"
-              variant="outlined"
-            />
-          </Stack>
-        </Stack>
-      </Paper>
-
-      {/* =================================================
-          SALES TABLE
-      ================================================= */}
+      {/* ===================================================
+          DAILY SALES
+      =================================================== */}
 
       <Paper
         elevation={0}
         sx={{
-          border: "1px solid",
+          border:
+            "1px solid",
           borderColor:
             "divider",
           borderRadius: 3,
@@ -1481,14 +1458,14 @@ export default function SellPage() {
                 xs: "flex-start",
                 sm: "center",
               },
-              gap: 1,
+              gap: 2,
             }}
           >
             <Box>
               <Typography
                 variant="h6"
                 sx={{
-                  fontWeight: 700,
+                  fontWeight: 800,
                 }}
               >
                 Daily Sales
@@ -1498,99 +1475,135 @@ export default function SellPage() {
                 variant="body2"
                 color="text.secondary"
               >
-                Sales records for{" "}
                 {formatMonth(
                   selectedMonth,
                   selectedYear
                 )}
               </Typography>
             </Box>
-          </Stack>
-        </Box>
 
-        <Divider />
-
-        {/* LOADING */}
-
-        {loading ? (
-          <Box
-            sx={{
-              py: 10,
-              textAlign: "center",
-            }}
-          >
-            <Typography
-              color="text.secondary"
-            >
-              Loading sales...
-            </Typography>
-          </Box>
-        ) : sales.length === 0 ? (
-          /* EMPTY */
-          <Box
-            sx={{
-              py: 10,
-              textAlign: "center",
-            }}
-          >
-            <PointOfSale
-              sx={{
-                fontSize: 55,
-                color:
-                  "text.disabled",
-              }}
-            />
-
-            <Typography
-              variant="h6"
-              sx={{
-                mt: 1,
-                fontWeight: 600,
-              }}
-            >
-              No sales records
-            </Typography>
-
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{
-                mb: 3,
-              }}
-            >
-              No sales have been
-              added for this month.
-            </Typography>
-
-            {!isMonthClosed && (
+            {!isClosed && (
               <Button
                 variant="contained"
+                size="small"
                 startIcon={<Add />}
                 onClick={
-                  openAddModal
+                  openAddSale
                 }
               >
                 Add Sale
               </Button>
             )}
+          </Stack>
+        </Box>
+
+        <Divider />
+
+        {loading ? (
+          <Box
+            sx={{
+              minHeight: 300,
+              display: "flex",
+              alignItems:
+                "center",
+              justifyContent:
+                "center",
+            }}
+          >
+            <Stack
+              spacing={2}
+              sx={{
+                alignItems:
+                  "center",
+              }}
+            >
+              <CircularProgress />
+
+              <Typography
+                color="text.secondary"
+              >
+                Loading sales...
+              </Typography>
+            </Stack>
+          </Box>
+        ) : sales.length ===
+          0 ? (
+          <Box
+            sx={{
+              minHeight: 320,
+              display: "flex",
+              alignItems:
+                "center",
+              justifyContent:
+                "center",
+              p: 4,
+            }}
+          >
+            <Stack
+              spacing={1}
+              sx={{
+                alignItems:
+                  "center",
+                textAlign: "center",
+              }}
+            >
+              <PointOfSale
+                sx={{
+                  fontSize: 56,
+                  color:
+                    "text.disabled",
+                }}
+              />
+
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 700,
+                }}
+              >
+                No sales records
+              </Typography>
+
+              <Typography
+                variant="body2"
+                color="text.secondary"
+              >
+                No sales have been
+                added yet.
+              </Typography>
+
+              {!isClosed && (
+                <Button
+                  sx={{
+                    mt: 2,
+                  }}
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={
+                    openAddSale
+                  }
+                >
+                  Add First Sale
+                </Button>
+              )}
+            </Stack>
           </Box>
         ) : (
           <TableContainer
             sx={{
-              maxHeight: 600,
-              overflowX: "auto",
+              maxHeight: 620,
             }}
           >
             <Table
               stickyHeader
               sx={{
-                minWidth: 1100,
+                minWidth: 1050,
               }}
             >
               <TableHead>
                 <TableRow>
                   <TableCell>
-                    <b>S.No</b>
+                    <b>#</b>
                   </TableCell>
 
                   <TableCell>
@@ -1625,16 +1638,20 @@ export default function SellPage() {
 
               <TableBody>
                 {sales.map(
-                  (sale, index) => {
+                  (
+                    sale,
+                    index
+                  ) => {
                     const balance =
                       getSaleBalance(
-                        sale,
                         index
                       );
 
                     return (
                       <TableRow
-                        key={sale.id}
+                        key={
+                          sale.id
+                        }
                         hover
                       >
                         <TableCell>
@@ -1649,15 +1666,17 @@ export default function SellPage() {
 
                         <TableCell align="right">
                           {formatPrice(
-                            sale.openingAmount
+                            Number(
+                              sale.openingAmount
+                            )
                           )}
                         </TableCell>
 
-                        <TableCell
-                          align="right"
-                        >
+                        <TableCell align="right">
                           {formatPrice(
-                            sale.expense
+                            Number(
+                              sale.expense
+                            )
                           )}
                         </TableCell>
 
@@ -1668,7 +1687,9 @@ export default function SellPage() {
                           }}
                         >
                           {formatPrice(
-                            sale.saleAmount
+                            Number(
+                              sale.saleAmount
+                            )
                           )}
                         </TableCell>
 
@@ -1694,7 +1715,7 @@ export default function SellPage() {
                         <TableCell
                           align="right"
                           sx={{
-                            fontWeight: 700,
+                            fontWeight: 800,
                             color:
                               balance >=
                               0
@@ -1708,13 +1729,28 @@ export default function SellPage() {
                         </TableCell>
 
                         <TableCell align="center">
-                          {!isMonthClosed && (
-                            <>
+                          {isClosed ? (
+                            <Chip
+                              size="small"
+                              icon={
+                                <Lock />
+                              }
+                              label="Locked"
+                            />
+                          ) : (
+                            <Stack
+                              direction="row"
+                              spacing={0.5}
+                              sx={{
+                                justifyContent:
+                                  "center",
+                              }}
+                            >
                               <IconButton
                                 size="small"
                                 color="primary"
                                 onClick={() =>
-                                  openEditModal(
+                                  openEditSale(
                                     sale
                                   )
                                 }
@@ -1725,25 +1761,28 @@ export default function SellPage() {
                               <IconButton
                                 size="small"
                                 color="error"
+                                disabled={
+                                  deletingId ===
+                                  sale.id
+                                }
                                 onClick={() =>
-                                  deleteSale(
+                                  void deleteSale(
                                     sale.id
                                   )
                                 }
                               >
-                                <DeleteOutlined fontSize="small" />
+                                {deletingId ===
+                                sale.id ? (
+                                  <CircularProgress
+                                    size={
+                                      18
+                                    }
+                                  />
+                                ) : (
+                                  <DeleteOutlined fontSize="small" />
+                                )}
                               </IconButton>
-                            </>
-                          )}
-
-                          {isMonthClosed && (
-                            <Chip
-                              size="small"
-                              icon={
-                                <Lock />
-                              }
-                              label="Locked"
-                            />
+                            </Stack>
                           )}
                         </TableCell>
                       </TableRow>
@@ -1751,7 +1790,7 @@ export default function SellPage() {
                   }
                 )}
 
-                {/* GRAND TOTAL */}
+                {/* TOTAL */}
 
                 <TableRow>
                   <TableCell
@@ -1760,7 +1799,7 @@ export default function SellPage() {
                   >
                     <Typography
                       sx={{
-                        fontWeight: 700,
+                        fontWeight: 800,
                       }}
                     >
                       MONTH TOTAL
@@ -1770,7 +1809,7 @@ export default function SellPage() {
                   <TableCell align="right">
                     <Typography
                       sx={{
-                        fontWeight: 700,
+                        fontWeight: 800,
                       }}
                     >
                       {formatPrice(
@@ -1782,11 +1821,11 @@ export default function SellPage() {
                   <TableCell align="right">
                     <Typography
                       sx={{
-                        fontWeight: 700,
+                        fontWeight: 800,
                       }}
                     >
                       {formatPrice(
-                        totalExpense
+                        vendorExpense
                       )}
                     </Typography>
                   </TableCell>
@@ -1794,30 +1833,32 @@ export default function SellPage() {
                   <TableCell align="right">
                     <Typography
                       sx={{
-                        fontWeight: 700,
+                        fontWeight: 800,
                       }}
                     >
                       {formatPrice(
-                        totalSale
+                        totalSales
                       )}
                     </Typography>
                   </TableCell>
 
                   <TableCell />
 
-                  <TableCell align="right">
+                  <TableCell
+                    align="right"
+                  >
                     <Typography
                       sx={{
-                        fontWeight: 700,
+                        fontWeight: 800,
                         color:
-                          displayedClosingBalance >=
+                          closingBalance >=
                           0
                             ? "success.main"
                             : "error.main",
                       }}
                     >
                       {formatPrice(
-                        displayedClosingBalance
+                        closingBalance
                       )}
                     </Typography>
                   </TableCell>
@@ -1830,15 +1871,16 @@ export default function SellPage() {
         )}
       </Paper>
 
-      {/* =================================================
+      {/* ===================================================
           MONTH HISTORY
-      ================================================= */}
+      =================================================== */}
 
       <Paper
         elevation={0}
         sx={{
           mt: 3,
-          border: "1px solid",
+          border:
+            "1px solid",
           borderColor:
             "divider",
           borderRadius: 3,
@@ -1853,7 +1895,7 @@ export default function SellPage() {
           <Typography
             variant="h6"
             sx={{
-              fontWeight: 700,
+              fontWeight: 800,
             }}
           >
             Month History
@@ -1863,14 +1905,15 @@ export default function SellPage() {
             variant="body2"
             color="text.secondary"
           >
-            Previous monthly sales and
-            closing balances
+            Previous months and
+            their closing balances
           </Typography>
         </Box>
 
         <Divider />
 
-        {sortedMonths.length === 0 ? (
+        {sortedHistory.length ===
+        0 ? (
           <Box
             sx={{
               p: 4,
@@ -1880,12 +1923,17 @@ export default function SellPage() {
             <Typography
               color="text.secondary"
             >
-              No month history available.
+              No month history
+              available.
             </Typography>
           </Box>
         ) : (
           <TableContainer>
-            <Table>
+            <Table
+              sx={{
+                minWidth: 700,
+              }}
+            >
               <TableHead>
                 <TableRow>
                   <TableCell>
@@ -1911,15 +1959,17 @@ export default function SellPage() {
               </TableHead>
 
               <TableBody>
-                {sortedMonths.map(
+                {sortedHistory.map(
                   (month) => (
                     <TableRow
-                      key={month.id}
                       hover
+                      key={
+                        month.id
+                      }
                     >
                       <TableCell
                         sx={{
-                          fontWeight: 600,
+                          fontWeight: 700,
                         }}
                       >
                         {formatMonth(
@@ -1930,7 +1980,9 @@ export default function SellPage() {
 
                       <TableCell align="right">
                         {formatPrice(
-                          month.openingBalance
+                          Number(
+                            month.openingBalance
+                          )
                         )}
                       </TableCell>
 
@@ -1973,23 +2025,11 @@ export default function SellPage() {
                           startIcon={
                             <Visibility />
                           }
-                          onClick={() => {
-                            setSelectedMonth(
-                              month.month
-                            );
-
-                            setSelectedYear(
-                              month.year
-                            );
-
-                            window.scrollTo(
-                              {
-                                top: 0,
-                                behavior:
-                                  "smooth",
-                              }
-                            );
-                          }}
+                          onClick={() =>
+                            viewHistoryMonth(
+                              month
+                            )
+                          }
                         >
                           View
                         </Button>
@@ -2003,13 +2043,15 @@ export default function SellPage() {
         )}
       </Paper>
 
-      {/* =================================================
-          ADD / EDIT SALE DIALOG
-      ================================================= */}
+      {/* ===================================================
+          ADD / EDIT DIALOG
+      =================================================== */}
 
       <Dialog
-        open={open}
-        onClose={closeModal}
+        open={openDialog}
+        onClose={
+          closeSaleDialog
+        }
         fullWidth
         maxWidth="sm"
       >
@@ -2027,12 +2069,13 @@ export default function SellPage() {
               <Typography
                 variant="h6"
                 sx={{
-                  fontWeight: 700,
+                  fontWeight: 800,
                 }}
               >
-                {editingId !== null
-                  ? "Edit Sale"
-                  : "Add Sale"}
+                {editingId ===
+                null
+                  ? "Add Sale"
+                  : "Edit Sale"}
               </Typography>
 
               <Typography
@@ -2047,24 +2090,27 @@ export default function SellPage() {
             </Box>
 
             <IconButton
-              onClick={closeModal}
               size="small"
+              onClick={
+                closeSaleDialog
+              }
+              disabled={saving}
             >
               <Close />
             </IconButton>
           </Stack>
         </DialogTitle>
 
-        <DialogContent dividers>
+        <DialogContent
+          dividers
+        >
           <Grid
             container
             spacing={2}
             sx={{
-              pt: 1,
+              pt: 0.5,
             }}
           >
-            {/* DATE */}
-
             <Grid
               size={{
                 xs: 12,
@@ -2079,9 +2125,10 @@ export default function SellPage() {
                   form.date
                 }
                 onChange={(event) =>
-                  handleChange(
+                  updateForm(
                     "date",
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
                 slotProps={{
@@ -2091,8 +2138,6 @@ export default function SellPage() {
                 }}
               />
             </Grid>
-
-            {/* OPENING */}
 
             <Grid
               size={{
@@ -2108,41 +2153,32 @@ export default function SellPage() {
                   form.openingAmount
                 }
                 onChange={(event) =>
-                  handleChange(
+                  updateForm(
                     "openingAmount",
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
                 slotProps={{
                   htmlInput: {
                     min: 0,
+                    step: "0.01",
                   },
                 }}
-                helperText="Previous balance"
               />
             </Grid>
-
-            {/* EXPENSE */}
 
             <Grid size={12}>
               <TextField
                 fullWidth
                 label="Vendor Expense"
-                type="number"
-                value={
+                value={formatPrice(
                   vendorExpense
-                }
+                )}
                 disabled
-                helperText="Automatically calculated from Vendor Bills for this month"
-                slotProps={{
-                  htmlInput: {
-                    min: 0,
-                  },
-                }}
+                helperText="Automatically calculated from vendor bills."
               />
             </Grid>
-
-            {/* SALE */}
 
             <Grid size={12}>
               <TextField
@@ -2153,20 +2189,20 @@ export default function SellPage() {
                   form.saleAmount
                 }
                 onChange={(event) =>
-                  handleChange(
+                  updateForm(
                     "saleAmount",
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
                 slotProps={{
                   htmlInput: {
                     min: 0,
+                    step: "0.01",
                   },
                 }}
               />
             </Grid>
-
-            {/* PAYMENT */}
 
             <Grid
               size={{
@@ -2182,9 +2218,10 @@ export default function SellPage() {
                   form.paymentMethod
                 }
                 onChange={(event) =>
-                  handleChange(
+                  updateForm(
                     "paymentMethod",
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
               >
@@ -2197,8 +2234,6 @@ export default function SellPage() {
                 </MenuItem>
               </TextField>
             </Grid>
-
-            {/* ONLINE */}
 
             <Grid
               size={{
@@ -2218,9 +2253,10 @@ export default function SellPage() {
                   "Online"
                 }
                 onChange={(event) =>
-                  handleChange(
+                  updateForm(
                     "onlineAccount",
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
               >
@@ -2245,7 +2281,8 @@ export default function SellPage() {
                 elevation={0}
                 sx={{
                   p: 2,
-                  border: "1px solid",
+                  border:
+                    "1px solid",
                   borderColor:
                     "divider",
                   borderRadius: 2,
@@ -2254,7 +2291,7 @@ export default function SellPage() {
                 }}
               >
                 <Stack
-                  spacing={1}
+                  spacing={1.25}
                 >
                   <Stack
                     direction="row"
@@ -2269,7 +2306,11 @@ export default function SellPage() {
                       Opening
                     </Typography>
 
-                    <Typography>
+                    <Typography
+                      sx={{
+                        fontWeight: 600,
+                      }}
+                    >
                       {formatPrice(
                         liveOpening
                       )}
@@ -2289,7 +2330,11 @@ export default function SellPage() {
                       Vendor Expense
                     </Typography>
 
-                    <Typography>
+                    <Typography
+                      sx={{
+                        fontWeight: 600,
+                      }}
+                    >
                       -{" "}
                       {formatPrice(
                         vendorExpense
@@ -2310,7 +2355,11 @@ export default function SellPage() {
                       Sale
                     </Typography>
 
-                    <Typography>
+                    <Typography
+                      sx={{
+                        fontWeight: 600,
+                      }}
+                    >
                       +{" "}
                       {formatPrice(
                         liveSale
@@ -2331,7 +2380,7 @@ export default function SellPage() {
                   >
                     <Typography
                       sx={{
-                        fontWeight: 600,
+                        fontWeight: 700,
                       }}
                     >
                       Expected Balance
@@ -2340,7 +2389,7 @@ export default function SellPage() {
                     <Typography
                       variant="h6"
                       sx={{
-                        fontWeight: 700,
+                        fontWeight: 800,
                         color:
                           liveBalance >=
                           0
@@ -2365,19 +2414,29 @@ export default function SellPage() {
           }}
         >
           <Button
-            onClick={closeModal}
-            color="inherit"
+            onClick={
+              closeSaleDialog
+            }
             disabled={saving}
+            color="inherit"
           >
             Cancel
           </Button>
 
           <Button
             variant="contained"
-            onClick={saveSale}
+            onClick={() =>
+              void saveSale()
+            }
             disabled={saving}
             startIcon={
-              editingId !== null ? (
+              saving ? (
+                <CircularProgress
+                  size={18}
+                  color="inherit"
+                />
+              ) : editingId !==
+                null ? (
                 <EditOutlined />
               ) : (
                 <Add />
@@ -2386,25 +2445,27 @@ export default function SellPage() {
           >
             {saving
               ? "Saving..."
-              : editingId !== null
-                ? "Update Sale"
-                : "Add Sale"}
+              : editingId !==
+                null
+              ? "Update Sale"
+              : "Add Sale"}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* =================================================
+      {/* ===================================================
           CLOSE MONTH DIALOG
-      ================================================= */}
+      =================================================== */}
 
       <Dialog
-        open={closeDialogOpen}
-        onClose={() =>
-          !closingMonth &&
-          setCloseDialogOpen(
-            false
-          )
-        }
+        open={closeDialog}
+        onClose={() => {
+          if (!closingMonth) {
+            setCloseDialog(
+              false
+            );
+          }
+        }}
         fullWidth
         maxWidth="sm"
       >
@@ -2422,7 +2483,7 @@ export default function SellPage() {
             <Typography
               variant="h6"
               sx={{
-                fontWeight: 700,
+                fontWeight: 800,
               }}
             >
               Close Month
@@ -2430,10 +2491,12 @@ export default function SellPage() {
           </Stack>
         </DialogTitle>
 
-        <DialogContent dividers>
+        <DialogContent
+          dividers
+        >
           <Typography
             sx={{
-              fontWeight: 600,
+              fontWeight: 700,
               mb: 2,
             }}
           >
@@ -2452,9 +2515,9 @@ export default function SellPage() {
               mb: 3,
             }}
           >
-            Once the month is closed,
-            sales in this month will
-            become read-only.
+            Once closed, the sales
+            records for this month
+            will become read-only.
           </Typography>
 
           <Stack
@@ -2473,7 +2536,7 @@ export default function SellPage() {
 
               <Typography
                 sx={{
-                  fontWeight: 600,
+                  fontWeight: 700,
                 }}
               >
                 {formatPrice(
@@ -2495,12 +2558,12 @@ export default function SellPage() {
 
               <Typography
                 sx={{
-                  fontWeight: 600,
+                  fontWeight: 700,
                 }}
               >
                 +{" "}
                 {formatPrice(
-                  totalSale
+                  totalSales
                 )}
               </Typography>
             </Stack>
@@ -2518,12 +2581,12 @@ export default function SellPage() {
 
               <Typography
                 sx={{
-                  fontWeight: 600,
+                  fontWeight: 700,
                 }}
               >
                 -{" "}
                 {formatPrice(
-                  totalExpense
+                  vendorExpense
                 )}
               </Typography>
             </Stack>
@@ -2535,11 +2598,13 @@ export default function SellPage() {
               sx={{
                 justifyContent:
                   "space-between",
+                alignItems:
+                  "center",
               }}
             >
               <Typography
                 sx={{
-                  fontWeight: 700,
+                  fontWeight: 800,
                 }}
               >
                 Closing Balance
@@ -2548,16 +2613,16 @@ export default function SellPage() {
               <Typography
                 variant="h6"
                 sx={{
-                  fontWeight: 700,
+                  fontWeight: 800,
                   color:
-                    calculatedClosingBalance >=
+                    calculatedClosing >=
                     0
                       ? "success.main"
                       : "error.main",
                 }}
               >
                 {formatPrice(
-                  calculatedClosingBalance
+                  calculatedClosing
                 )}
               </Typography>
             </Stack>
@@ -2569,9 +2634,9 @@ export default function SellPage() {
               mt: 3,
             }}
           >
-            The next month's opening
-            balance will be this month's
-            closing balance.
+            The next month will use
+            this closing balance as
+            its opening balance.
           </Alert>
         </DialogContent>
 
@@ -2582,7 +2647,7 @@ export default function SellPage() {
         >
           <Button
             onClick={() =>
-              setCloseDialogOpen(
+              setCloseDialog(
                 false
               )
             }
@@ -2596,12 +2661,22 @@ export default function SellPage() {
           <Button
             variant="contained"
             color="warning"
-            startIcon={<Lock />}
-            onClick={
-              closeCurrentMonth
+            startIcon={
+              closingMonth ? (
+                <CircularProgress
+                  size={18}
+                  color="inherit"
+                />
+              ) : (
+                <Lock />
+              )
+            }
+            onClick={() =>
+              void closeCurrentMonth()
             }
             disabled={
-              closingMonth
+              closingMonth ||
+              !activeMonth
             }
           >
             {closingMonth
