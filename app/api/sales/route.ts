@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import {prisma} from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 /* =========================================================
    DATE HELPERS
@@ -10,35 +10,47 @@ function monthStart(year: number, month: number) {
 }
 
 function nextMonth(year: number, month: number) {
-  if (month === 12) {
-    return {
-      year: year + 1,
-      month: 1,
-    };
-  }
-
-  return {
-    year,
-    month: month + 1,
-  };
+  return month === 12
+    ? { year: year + 1, month: 1 }
+    : { year, month: month + 1 };
 }
 
 function previousMonth(year: number, month: number) {
-  if (month === 1) {
-    return {
-      year: year - 1,
-      month: 12,
-    };
-  }
-
-  return {
-    year,
-    month: month - 1,
-  };
+  return month === 1
+    ? { year: year - 1, month: 12 }
+    : { year, month: month - 1 };
 }
 
 /* =========================================================
-   VENDOR EXPENSE
+   DATE RANGE FOR ONE DAY
+========================================================= */
+
+function dayStart(date: Date) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
+}
+
+function nextDay(date: Date) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + 1,
+    0,
+    0,
+    0,
+    0
+  );
+}
+
+/* =========================================================
+   MONTH VENDOR EXPENSE
 ========================================================= */
 
 async function getVendorExpense(
@@ -74,14 +86,99 @@ async function getVendorExpense(
 }
 
 /* =========================================================
+   VENDOR EXPENSE FOR ONE DATE
+========================================================= */
+
+async function getVendorExpenseForDate(
+  date: Date
+) {
+  const start = dayStart(date);
+  const end = nextDay(date);
+
+  const result =
+    await prisma.vendorBill.aggregate({
+      _sum: {
+        billAmount: true,
+      },
+
+      where: {
+        dateTime: {
+          gte: start,
+          lt: end,
+        },
+      },
+    });
+
+  return Number(
+    result._sum.billAmount ?? 0
+  );
+}
+
+/* =========================================================
+   CALCULATE MONTH CLOSING
+========================================================= */
+
+async function calculateMonthClosing(
+  salesMonthId: number
+) {
+  const salesMonth =
+    await prisma.salesMonth.findUnique({
+      where: {
+        id: salesMonthId,
+      },
+    });
+
+  if (!salesMonth) {
+    throw new Error(
+      "Sales month not found."
+    );
+  }
+
+  const sales =
+    await prisma.sale.aggregate({
+      _sum: {
+        saleAmount: true,
+      },
+
+      where: {
+        salesMonthId,
+      },
+    });
+
+  const vendorExpense =
+    await getVendorExpense(
+      salesMonth.year,
+      salesMonth.month
+    );
+
+  const opening =
+    Number(
+      salesMonth.openingBalance
+    );
+
+  const totalSales =
+    Number(
+      sales._sum.saleAmount ?? 0
+    );
+
+  const closing =
+    opening +
+    totalSales -
+    vendorExpense;
+
+  return {
+    opening,
+    totalSales,
+    vendorExpense,
+    closing,
+  };
+}
+
+/* =========================================================
    GET OR CREATE ACTIVE MONTH
 ========================================================= */
 
 async function getOrCreateActiveMonth() {
-  /* -------------------------------------------------------
-     Find latest open month
-  ------------------------------------------------------- */
-
   const existing =
     await prisma.salesMonth.findFirst({
       where: {
@@ -102,23 +199,19 @@ async function getOrCreateActiveMonth() {
     return existing;
   }
 
-  /* -------------------------------------------------------
-     Current calendar month
-  ------------------------------------------------------- */
-
   const now = new Date();
 
-  const year = now.getFullYear();
+  const year =
+    now.getFullYear();
 
   const month =
     now.getMonth() + 1;
 
-  /* -------------------------------------------------------
-     Previous month
-  ------------------------------------------------------- */
-
   const previous =
-    previousMonth(year, month);
+    previousMonth(
+      year,
+      month
+    );
 
   const previousRecord =
     await prisma.salesMonth.findUnique({
@@ -130,39 +223,75 @@ async function getOrCreateActiveMonth() {
       },
     });
 
-  const openingBalance = Number(
-    previousRecord?.closingBalance ?? 0
-  );
-
-  /* -------------------------------------------------------
-     Create current month
-  ------------------------------------------------------- */
-
-  const activeMonth =
-    await prisma.salesMonth.upsert({
-      where: {
-        year_month: {
-          year,
-          month,
-        },
-      },
-
-      update: {},
-
-      create: {
+  return prisma.salesMonth.upsert({
+    where: {
+      year_month: {
         year,
         month,
-        openingBalance,
-        isClosed: false,
       },
-    });
+    },
 
-  return activeMonth;
+    update: {},
+
+    create: {
+      year,
+      month,
+
+      openingBalance:
+        Number(
+          previousRecord?.closingBalance ?? 0
+        ),
+
+      closingBalance: null,
+
+      isClosed: false,
+    },
+  });
 }
 
 /* =========================================================
-   GET
-   Current month + previous months history
+   NORMALIZE AMOUNT
+========================================================= */
+
+function normalizeAmount(
+  value: unknown
+) {
+  const n =
+    typeof value === "number"
+      ? value
+      : Number(value);
+
+  return Number.isFinite(n)
+    ? n
+    : NaN;
+}
+
+/* =========================================================
+   NORMALIZE ONLINE ACCOUNT
+========================================================= */
+
+function normalizeOnlineAccount(
+  value: unknown
+) {
+  if (
+    value === "EasyPaisa" ||
+    value === "EASYPAISA"
+  ) {
+    return "EASYPAISA" as const;
+  }
+
+  if (
+    value === "Bank Islami" ||
+    value === "BANK_ISLAMI"
+  ) {
+    return "BANK_ISLAMI" as const;
+  }
+
+  return null;
+}
+
+/* =========================================================
+   GET SALES
 ========================================================= */
 
 export async function GET() {
@@ -170,14 +299,11 @@ export async function GET() {
     const activeMonth =
       await getOrCreateActiveMonth();
 
-    /* -----------------------------------------------------
-       Current month sales
-    ----------------------------------------------------- */
-
     const sales =
       await prisma.sale.findMany({
         where: {
-          salesMonthId: activeMonth.id,
+          salesMonthId:
+            activeMonth.id,
         },
 
         orderBy: [
@@ -190,31 +316,99 @@ export async function GET() {
         ],
       });
 
-    /* -----------------------------------------------------
-       Vendor expense
-    ----------------------------------------------------- */
+    /*
+     * IMPORTANT:
+     *
+     * Every sale gets its own expense
+     * from VendorBill of the SAME DATE.
+     *
+     * We do NOT use monthly expense
+     * for individual sale rows.
+     */
 
+    const salesWithDateExpense =
+      await Promise.all(
+        sales.map(async (sale) => {
+          const saleDate =
+            new Date(sale.date);
+
+          const dateExpense =
+            await getVendorExpenseForDate(
+              saleDate
+            );
+
+          return {
+            id: sale.id,
+
+            salesMonthId:
+              activeMonth.id,
+
+            date:
+              sale.date
+                .toISOString()
+                .split("T")[0],
+
+            openingAmount:
+              Number(
+                sale.openingAmount
+              ),
+
+            /*
+             * ALWAYS use VendorBill
+             * for this sale's date.
+             */
+            expense:
+              dateExpense,
+
+            cashAmount:
+              Number(
+                sale.cashAmount
+              ),
+
+            onlineAmount:
+              Number(
+                sale.onlineAmount
+              ),
+
+            saleAmount:
+              Number(
+                sale.saleAmount
+              ),
+
+            onlineAccount:
+              sale.onlineAccount ===
+              "EASYPAISA"
+                ? "EasyPaisa"
+                : sale.onlineAccount ===
+                  "BANK_ISLAMI"
+                ? "Bank Islami"
+                : "",
+          };
+        })
+      );
+
+    /*
+     * Monthly vendor expense.
+     *
+     * This is only for:
+     * - summary card
+     * - month closing
+     */
     const vendorExpense =
       await getVendorExpense(
         activeMonth.year,
         activeMonth.month
       );
 
-    /* -----------------------------------------------------
-       Total sales
-    ----------------------------------------------------- */
-
     const totalSales =
       sales.reduce(
         (total, sale) =>
           total +
-          Number(sale.saleAmount),
+          Number(
+            sale.saleAmount
+          ),
         0
       );
-
-    /* -----------------------------------------------------
-       Current balance
-    ----------------------------------------------------- */
 
     const currentBalance =
       Number(
@@ -222,10 +416,6 @@ export async function GET() {
       ) +
       totalSales -
       vendorExpense;
-
-    /* -----------------------------------------------------
-       History
-    ----------------------------------------------------- */
 
     const history =
       await prisma.salesMonth.findMany({
@@ -247,24 +437,26 @@ export async function GET() {
         },
       });
 
-    /* -----------------------------------------------------
-       Response
-    ----------------------------------------------------- */
-
     return NextResponse.json({
+      success: true,
+
       activeMonth: {
         id: activeMonth.id,
 
-        month: activeMonth.month,
+        month:
+          activeMonth.month,
 
-        year: activeMonth.year,
+        year:
+          activeMonth.year,
 
-        openingBalance: Number(
-          activeMonth.openingBalance
-        ),
+        openingBalance:
+          Number(
+            activeMonth.openingBalance
+          ),
 
         closingBalance:
-          activeMonth.closingBalance === null
+          activeMonth.closingBalance ===
+          null
             ? null
             : Number(
                 activeMonth.closingBalance
@@ -277,93 +469,52 @@ export async function GET() {
           activeMonth.closedAt,
       },
 
-      /* ---------------------------------------------------
-         SALES
+      sales:
+        salesWithDateExpense,
 
-         IMPORTANT:
-         Do NOT use sale.salesMonthId here.
-         Use activeMonth.id instead.
-      --------------------------------------------------- */
-
-      sales: sales.map((sale) => ({
-        id: sale.id,
-
-        salesMonthId:
-          activeMonth.id,
-
-        date:
-          sale.date
-            .toISOString()
-            .split("T")[0],
-
-        openingAmount:
-          Number(
-            sale.openingAmount
-          ),
-
-        expense:
-          Number(sale.expense),
-
-        saleAmount:
-          Number(
-            sale.saleAmount
-          ),
-
-        paymentMethod:
-          sale.paymentMethod === "CASH"
-            ? "Cash"
-            : "Online",
-
-        onlineAccount:
-          sale.onlineAccount ===
-          "EASYPAISA"
-            ? "EasyPaisa"
-            : sale.onlineAccount ===
-                "BANK_ISLAMI"
-              ? "Bank Islami"
-              : "",
-      })),
-
+      /*
+       * This is MONTH expense.
+       */
       vendorExpense,
 
       totalSales,
 
       currentBalance,
 
-      /* ---------------------------------------------------
-         MONTH HISTORY
-      --------------------------------------------------- */
+      history:
+        history.map(
+          (item) => ({
+            id: item.id,
 
-      history: history.map(
-        (item) => ({
-          id: item.id,
+            month:
+              item.month,
 
-          month: item.month,
+            year:
+              item.year,
 
-          year: item.year,
+            openingBalance:
+              Number(
+                item.openingBalance
+              ),
 
-          openingBalance:
-            Number(
-              item.openingBalance
-            ),
+            closingBalance:
+              item.closingBalance ===
+              null
+                ? null
+                : Number(
+                    item.closingBalance
+                  ),
 
-          closingBalance:
-            item.closingBalance === null
-              ? null
-              : Number(
-                  item.closingBalance
-                ),
+            isClosed:
+              item.isClosed,
 
-          isClosed:
-            item.isClosed,
+            closedAt:
+              item.closedAt,
 
-          closedAt:
-            item.closedAt,
-
-          salesCount:
-            item._count.sales,
-        })
-      ),
+            salesCount:
+              item._count.sales,
+          })
+        ),
     });
   } catch (error) {
     console.error(
@@ -374,7 +525,9 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          "Unable to load sales.",
+          error instanceof Error
+            ? error.message
+            : "Unable to load sales.",
       },
       {
         status: 500,
@@ -384,10 +537,7 @@ export async function GET() {
 }
 
 /* =========================================================
-   POST
-
-   1. Add Sale
-   2. Close Month
+   POST SALE / CLOSE MONTH
 ========================================================= */
 
 export async function POST(
@@ -408,10 +558,6 @@ export async function POST(
       const activeMonth =
         await getOrCreateActiveMonth();
 
-      /* ---------------------------------------------------
-         Already closed
-      --------------------------------------------------- */
-
       if (
         activeMonth.isClosed
       ) {
@@ -426,52 +572,10 @@ export async function POST(
         );
       }
 
-      /* ---------------------------------------------------
-         Get current month sales
-      --------------------------------------------------- */
-
-      const sales =
-        await prisma.sale.findMany({
-          where: {
-            salesMonthId:
-              activeMonth.id,
-          },
-        });
-
-      const totalSales =
-        sales.reduce(
-          (total, sale) =>
-            total +
-            Number(
-              sale.saleAmount
-            ),
-          0
+      const result =
+        await calculateMonthClosing(
+          activeMonth.id
         );
-
-      /* ---------------------------------------------------
-         Vendor expense
-      --------------------------------------------------- */
-
-      const vendorExpense =
-        await getVendorExpense(
-          activeMonth.year,
-          activeMonth.month
-        );
-
-      /* ---------------------------------------------------
-         Closing balance
-      --------------------------------------------------- */
-
-      const closingBalance =
-        Number(
-          activeMonth.openingBalance
-        ) +
-        totalSales -
-        vendorExpense;
-
-      /* ---------------------------------------------------
-         Close current month
-      --------------------------------------------------- */
 
       const closedMonth =
         await prisma.salesMonth.update({
@@ -480,7 +584,8 @@ export async function POST(
           },
 
           data: {
-            closingBalance,
+            closingBalance:
+              result.closing,
 
             isClosed: true,
 
@@ -488,10 +593,6 @@ export async function POST(
               new Date(),
           },
         });
-
-      /* ---------------------------------------------------
-         Create next month
-      --------------------------------------------------- */
 
       const next =
         nextMonth(
@@ -510,18 +611,23 @@ export async function POST(
 
           update: {
             openingBalance:
-              closingBalance,
+              result.closing,
 
             isClosed: false,
+
+            closingBalance:
+              null,
           },
 
           create: {
             year: next.year,
-
             month: next.month,
 
             openingBalance:
-              closingBalance,
+              result.closing,
+
+            closingBalance:
+              null,
 
             isClosed: false,
           },
@@ -574,20 +680,19 @@ export async function POST(
     }
 
     /* =====================================================
-       ADD SALE
+       CREATE SALE
     ===================================================== */
 
     const {
       date,
-      openingAmount,
-      saleAmount,
-      paymentMethod,
+      openingAmount:
+        rawOpening,
+      cashAmount:
+        rawCash,
+      onlineAmount:
+        rawOnline,
       onlineAccount,
     } = body;
-
-    /* -----------------------------------------------------
-       Validate date
-    ----------------------------------------------------- */
 
     if (!date) {
       return NextResponse.json(
@@ -601,13 +706,34 @@ export async function POST(
       );
     }
 
-    /* -----------------------------------------------------
-       Validate opening
-    ----------------------------------------------------- */
+    const openingAmount =
+      normalizeAmount(
+        rawOpening
+      );
+
+    const cashAmount =
+      rawCash === "" ||
+      rawCash === null ||
+      rawCash === undefined
+        ? 0
+        : normalizeAmount(
+            rawCash
+          );
+
+    const onlineAmount =
+      rawOnline === "" ||
+      rawOnline === null ||
+      rawOnline === undefined
+        ? 0
+        : normalizeAmount(
+            rawOnline
+          );
+
+    const saleAmount =
+      cashAmount +
+      onlineAmount;
 
     if (
-      typeof openingAmount !==
-        "number" ||
       !Number.isFinite(
         openingAmount
       ) ||
@@ -624,43 +750,33 @@ export async function POST(
       );
     }
 
-    /* -----------------------------------------------------
-       Validate sale
-    ----------------------------------------------------- */
-
     if (
-      typeof saleAmount !==
-        "number" ||
       !Number.isFinite(
-        saleAmount
+        cashAmount
       ) ||
-      saleAmount <= 0
+      cashAmount < 0
     ) {
       return NextResponse.json(
         {
           error:
-            "Sale amount must be greater than zero.",
+            "Cash amount must be a valid number.",
         },
         {
           status: 400,
         }
       );
     }
-
-    /* -----------------------------------------------------
-       Validate payment
-    ----------------------------------------------------- */
 
     if (
-      paymentMethod !==
-        "Cash" &&
-      paymentMethod !==
-        "Online"
+      !Number.isFinite(
+        onlineAmount
+      ) ||
+      onlineAmount < 0
     ) {
       return NextResponse.json(
         {
           error:
-            "Invalid payment method.",
+            "Online amount must be a valid number.",
         },
         {
           status: 400,
@@ -668,22 +784,31 @@ export async function POST(
       );
     }
 
-    /* -----------------------------------------------------
-       Validate online account
-    ----------------------------------------------------- */
+    if (saleAmount <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Cash + Online amount must be greater than zero.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const dbOnlineAccount =
+      normalizeOnlineAccount(
+        onlineAccount
+      );
 
     if (
-      paymentMethod ===
-        "Online" &&
-      onlineAccount !==
-        "EasyPaisa" &&
-      onlineAccount !==
-        "Bank Islami"
+      onlineAmount > 0 &&
+      !dbOnlineAccount
     ) {
       return NextResponse.json(
         {
           error:
-            "Please select EasyPaisa or Bank Islami.",
+            "Please select EasyPaisa or Bank Islami for online payment.",
         },
         {
           status: 400,
@@ -691,16 +816,23 @@ export async function POST(
       );
     }
 
-    /* -----------------------------------------------------
-       Get active month
-    ----------------------------------------------------- */
+    if (
+      onlineAmount === 0 &&
+      onlineAccount
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Online account can only be selected when online amount is greater than zero.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
     const activeMonth =
       await getOrCreateActiveMonth();
-
-    /* -----------------------------------------------------
-       Do not allow sale in closed month
-    ----------------------------------------------------- */
 
     if (
       activeMonth.isClosed
@@ -716,11 +848,10 @@ export async function POST(
       );
     }
 
-    /* -----------------------------------------------------
-       First sale:
-       update month opening balance
-    ----------------------------------------------------- */
-
+    /*
+     * First sale decides the month's
+     * opening balance.
+     */
     const existingSales =
       await prisma.sale.count({
         where: {
@@ -729,9 +860,7 @@ export async function POST(
         },
       });
 
-    if (
-      existingSales === 0
-    ) {
+    if (existingSales === 0) {
       await prisma.salesMonth.update({
         where: {
           id: activeMonth.id,
@@ -744,13 +873,22 @@ export async function POST(
       });
     }
 
-    /* -----------------------------------------------------
-       Create sale
+    const saleDate =
+      new Date(
+        `${date}T00:00:00`
+      );
 
-       IMPORTANT:
-       salesMonthId IS used here because it is required
-       by your Prisma schema.
-    ----------------------------------------------------- */
+    /*
+     * IMPORTANT:
+     *
+     * Expense is taken ONLY from
+     * VendorBill records having the
+     * SAME DATE as this sale.
+     */
+    const dateExpense =
+      await getVendorExpenseForDate(
+        saleDate
+      );
 
     const sale =
       await prisma.sale.create({
@@ -758,37 +896,58 @@ export async function POST(
           salesMonthId:
             activeMonth.id,
 
-          date: new Date(
-            `${date}T00:00:00`
-          ),
+          date:
+            saleDate,
 
-          openingAmount,
+          openingAmount:
+            openingAmount,
 
-          expense: 0,
+          /*
+           * THIS IS NOW THE EXPENSE
+           * FOR THIS SPECIFIC DATE.
+           */
+          expense:
+            dateExpense,
 
-          saleAmount,
+          cashAmount:
+            cashAmount,
+
+          onlineAmount:
+            onlineAmount,
+
+          saleAmount:
+            saleAmount,
 
           paymentMethod:
-            paymentMethod ===
-            "Cash"
-              ? "CASH"
-              : "ONLINE",
+            onlineAmount > 0 &&
+            cashAmount === 0
+              ? "ONLINE"
+              : "CASH",
 
           onlineAccount:
-            paymentMethod ===
-            "Online"
-              ? onlineAccount ===
-                "EasyPaisa"
-                ? "EASYPAISA"
-                : "BANK_ISLAMI"
-              : null,
+            dbOnlineAccount,
         },
       });
 
-    /* -----------------------------------------------------
-       IMPORTANT:
-       Don't access sale.salesMonthId here.
-    ----------------------------------------------------- */
+    /*
+     * Recalculate current month
+     * closing balance after adding sale.
+     */
+    const closing =
+      await calculateMonthClosing(
+        activeMonth.id
+      );
+
+    await prisma.salesMonth.update({
+      where: {
+        id: activeMonth.id,
+      },
+
+      data: {
+        closingBalance:
+          closing.closing,
+      },
+    });
 
     return NextResponse.json(
       {
@@ -798,7 +957,44 @@ export async function POST(
           id: sale.id,
 
           salesMonthId:
-            activeMonth.id,
+            sale.salesMonthId,
+
+          date:
+            sale.date
+              .toISOString()
+              .split("T")[0],
+
+          openingAmount:
+            Number(
+              sale.openingAmount
+            ),
+
+          expense:
+            dateExpense,
+
+          cashAmount:
+            Number(
+              sale.cashAmount
+            ),
+
+          onlineAmount:
+            Number(
+              sale.onlineAmount
+            ),
+
+          saleAmount:
+            Number(
+              sale.saleAmount
+            ),
+
+          onlineAccount:
+            sale.onlineAccount ===
+            "EASYPAISA"
+              ? "EasyPaisa"
+              : sale.onlineAccount ===
+                "BANK_ISLAMI"
+              ? "Bank Islami"
+              : "",
         },
       },
       {
@@ -814,7 +1010,9 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Unable to save sale.",
+          error instanceof Error
+            ? error.message
+            : "Unable to save sale.",
       },
       {
         status: 500,
@@ -822,3 +1020,4 @@ export async function POST(
     );
   }
 }
+

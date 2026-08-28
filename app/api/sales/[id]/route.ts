@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import {prisma} from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 /* =========================================================
    HELPERS
@@ -8,11 +8,201 @@ import {prisma} from "@/lib/prisma";
 function getId(value: string) {
   const id = Number(value);
 
-  if (!Number.isInteger(id) || id <= 0) {
+  if (
+    !Number.isInteger(id) ||
+    id <= 0
+  ) {
     return null;
   }
 
   return id;
+}
+
+function dayStart(date: Date) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
+}
+
+function nextDay(date: Date) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + 1,
+    0,
+    0,
+    0,
+    0
+  );
+}
+
+async function getVendorExpenseForDate(
+  date: Date
+) {
+  const start = dayStart(date);
+  const end = nextDay(date);
+
+  const result =
+    await prisma.vendorBill.aggregate({
+      _sum: {
+        billAmount: true,
+      },
+
+      where: {
+        dateTime: {
+          gte: start,
+          lt: end,
+        },
+      },
+    });
+
+  return Number(
+    result._sum.billAmount ?? 0
+  );
+}
+
+function normalizeOnlineAccount(
+  value: unknown
+) {
+  if (
+    value === "EasyPaisa" ||
+    value === "EASYPAISA"
+  ) {
+    return "EASYPAISA" as const;
+  }
+
+  if (
+    value === "Bank Islami" ||
+    value === "BANK_ISLAMI"
+  ) {
+    return "BANK_ISLAMI" as const;
+  }
+
+  return null;
+}
+
+function normalizeAmount(
+  value: unknown
+) {
+  const n =
+    typeof value === "number"
+      ? value
+      : Number(value);
+
+  return Number.isFinite(n)
+    ? n
+    : NaN;
+}
+
+/* =========================================================
+   RECALCULATE MONTH
+========================================================= */
+
+async function recalculateMonth(
+  salesMonthId: number
+) {
+  const month =
+    await prisma.salesMonth.findUnique({
+      where: {
+        id: salesMonthId,
+      },
+    });
+
+  if (!month) {
+    throw new Error(
+      "Sales month not found."
+    );
+  }
+
+  const sales =
+    await prisma.sale.findMany({
+      where: {
+        salesMonthId,
+      },
+    });
+
+  const totalSales =
+    sales.reduce(
+      (total, sale) =>
+        total +
+        Number(
+          sale.saleAmount
+        ),
+      0
+    );
+
+  const start = new Date(
+    month.year,
+    month.month - 1,
+    1,
+    0,
+    0,
+    0,
+    0
+  );
+
+  const end =
+    month.month === 12
+      ? new Date(
+          month.year + 1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0
+        )
+      : new Date(
+          month.year,
+          month.month,
+          1,
+          0,
+          0,
+          0,
+          0
+        );
+
+  const vendor =
+    await prisma.vendorBill.aggregate({
+      _sum: {
+        billAmount: true,
+      },
+
+      where: {
+        dateTime: {
+          gte: start,
+          lt: end,
+        },
+      },
+    });
+
+  const vendorExpense =
+    Number(
+      vendor._sum.billAmount ?? 0
+    );
+
+  const opening =
+    Number(
+      month.openingBalance
+    );
+
+  const closing =
+    opening +
+    totalSales -
+    vendorExpense;
+
+  return {
+    opening,
+    totalSales,
+    vendorExpense,
+    closing,
+  };
 }
 
 /* =========================================================
@@ -22,18 +212,24 @@ function getId(value: string) {
 export async function GET(
   request: Request,
   context: {
-    params: Promise<{ id: string }>;
+    params: Promise<{
+      id: string;
+    }>;
   }
 ) {
   try {
-    const { id: idParam } = await context.params;
+    const {
+      id: idParam,
+    } = await context.params;
 
-    const id = getId(idParam);
+    const id =
+      getId(idParam);
 
     if (id === null) {
       return NextResponse.json(
         {
-          error: "Invalid sale ID.",
+          error:
+            "Invalid sale ID.",
         },
         {
           status: 400,
@@ -41,56 +237,22 @@ export async function GET(
       );
     }
 
-    /* -----------------------------------------------------
-       Get sale + month
-    ----------------------------------------------------- */
+    const sale =
+      await prisma.sale.findUnique({
+        where: {
+          id,
+        },
 
-    const rows = await prisma.$queryRaw<
-      Array<{
-        id: number;
-        salesMonthId: number;
-        date: Date;
-        openingAmount: string | number;
-        expense: string | number;
-        saleAmount: string | number;
-        paymentMethod: string;
-        onlineAccount: string | null;
+        include: {
+          salesMonth: true,
+        },
+      });
 
-        month: number;
-        year: number;
-        isClosed: boolean;
-        closingBalance: string | number | null;
-      }>
-    >`
-      SELECT
-        s."id",
-        s."salesMonthId",
-        s."date",
-        s."openingAmount",
-        s."expense",
-        s."saleAmount",
-        s."paymentMethod",
-        s."onlineAccount",
-
-        sm."month",
-        sm."year",
-        sm."isClosed",
-        sm."closingBalance"
-
-      FROM "sales" s
-
-      INNER JOIN "sales_months" sm
-        ON sm."id" = s."salesMonthId"
-
-      WHERE s."id" = ${id}
-
-      LIMIT 1
-    `;
-
-    if (rows.length === 0) {
+    if (!sale) {
       return NextResponse.json(
         {
-          error: "Sale not found.",
+          error:
+            "Sale not found.",
         },
         {
           status: 404,
@@ -98,52 +260,86 @@ export async function GET(
       );
     }
 
-    const sale = rows[0];
+    const expense =
+      await getVendorExpenseForDate(
+        new Date(sale.date)
+      );
 
     return NextResponse.json({
+      success: true,
+
       sale: {
         id: sale.id,
 
         salesMonthId:
           sale.salesMonthId,
 
-        date: sale.date
-          .toISOString()
-          .split("T")[0],
+        date:
+          sale.date
+            .toISOString()
+            .split("T")[0],
 
         openingAmount:
-          Number(sale.openingAmount),
+          Number(
+            sale.openingAmount
+          ),
 
-        expense:
-          Number(sale.expense),
+        expense,
+
+        cashAmount:
+          Number(
+            sale.cashAmount
+          ),
+
+        onlineAmount:
+          Number(
+            sale.onlineAmount
+          ),
 
         saleAmount:
-          Number(sale.saleAmount),
-
-        paymentMethod:
-          sale.paymentMethod === "CASH"
-            ? "Cash"
-            : "Online",
+          Number(
+            sale.saleAmount
+          ),
 
         onlineAccount:
-          sale.onlineAccount === "EASYPAISA"
+          sale.onlineAccount ===
+          "EASYPAISA"
             ? "EasyPaisa"
-            : sale.onlineAccount === "BANK_ISLAMI"
-              ? "Bank Islami"
-              : "",
+            : sale.onlineAccount ===
+              "BANK_ISLAMI"
+            ? "Bank Islami"
+            : "",
+      },
 
-        salesMonth: {
-          month: sale.month,
-          year: sale.year,
-          isClosed: sale.isClosed,
+      salesMonth: {
+        id:
+          sale.salesMonth.id,
 
-          closingBalance:
-            sale.closingBalance === null
-              ? null
-              : Number(
-                  sale.closingBalance
-                ),
-        },
+        month:
+          sale.salesMonth.month,
+
+        year:
+          sale.salesMonth.year,
+
+        openingBalance:
+          Number(
+            sale.salesMonth
+              .openingBalance
+          ),
+
+        closingBalance:
+          sale.salesMonth
+            .closingBalance ===
+          null
+            ? null
+            : Number(
+                sale.salesMonth
+                  .closingBalance
+              ),
+
+        isClosed:
+          sale.salesMonth
+            .isClosed,
       },
     });
   } catch (error) {
@@ -154,7 +350,10 @@ export async function GET(
 
     return NextResponse.json(
       {
-        error: "Unable to load sale.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to load sale.",
       },
       {
         status: 500,
@@ -164,24 +363,30 @@ export async function GET(
 }
 
 /* =========================================================
-   PUT / UPDATE SALE
+   UPDATE SALE
 ========================================================= */
 
 export async function PUT(
   request: Request,
   context: {
-    params: Promise<{ id: string }>;
+    params: Promise<{
+      id: string;
+    }>;
   }
 ) {
   try {
-    const { id: idParam } = await context.params;
+    const {
+      id: idParam,
+    } = await context.params;
 
-    const id = getId(idParam);
+    const id =
+      getId(idParam);
 
     if (id === null) {
       return NextResponse.json(
         {
-          error: "Invalid sale ID.",
+          error:
+            "Invalid sale ID.",
         },
         {
           status: 400,
@@ -189,24 +394,53 @@ export async function PUT(
       );
     }
 
-    const body = await request.json();
+    const body =
+      await request.json();
 
-    const {
-      date,
-      openingAmount,
-      saleAmount,
-      paymentMethod,
-      onlineAccount,
-    } = body;
+    const date =
+      body.date;
 
-    /* -----------------------------------------------------
-       Validate date
-    ----------------------------------------------------- */
+    const openingAmount =
+      normalizeAmount(
+        body.openingAmount
+      );
+
+    const rawCash =
+      body.cashAmount;
+
+    const rawOnline =
+      body.onlineAmount;
+
+    const cashAmount =
+      rawCash === "" ||
+      rawCash === null ||
+      rawCash === undefined
+        ? 0
+        : normalizeAmount(
+            rawCash
+          );
+
+    const onlineAmount =
+      rawOnline === "" ||
+      rawOnline === null ||
+      rawOnline === undefined
+        ? 0
+        : normalizeAmount(
+            rawOnline
+          );
+
+    const saleAmount =
+      cashAmount +
+      onlineAmount;
+
+    const onlineAccount =
+      body.onlineAccount;
 
     if (!date) {
       return NextResponse.json(
         {
-          error: "Date is required.",
+          error:
+            "Date is required.",
         },
         {
           status: 400,
@@ -214,13 +448,10 @@ export async function PUT(
       );
     }
 
-    /* -----------------------------------------------------
-       Validate opening
-    ----------------------------------------------------- */
-
     if (
-      typeof openingAmount !== "number" ||
-      !Number.isFinite(openingAmount) ||
+      !Number.isFinite(
+        openingAmount
+      ) ||
       openingAmount < 0
     ) {
       return NextResponse.json(
@@ -234,19 +465,16 @@ export async function PUT(
       );
     }
 
-    /* -----------------------------------------------------
-       Validate sale
-    ----------------------------------------------------- */
-
     if (
-      typeof saleAmount !== "number" ||
-      !Number.isFinite(saleAmount) ||
-      saleAmount <= 0
+      !Number.isFinite(
+        cashAmount
+      ) ||
+      cashAmount < 0
     ) {
       return NextResponse.json(
         {
           error:
-            "Sale amount must be greater than zero.",
+            "Cash amount must be a valid number.",
         },
         {
           status: 400,
@@ -254,18 +482,16 @@ export async function PUT(
       );
     }
 
-    /* -----------------------------------------------------
-       Validate payment method
-    ----------------------------------------------------- */
-
     if (
-      paymentMethod !== "Cash" &&
-      paymentMethod !== "Online"
+      !Number.isFinite(
+        onlineAmount
+      ) ||
+      onlineAmount < 0
     ) {
       return NextResponse.json(
         {
           error:
-            "Invalid payment method.",
+            "Online amount must be a valid number.",
         },
         {
           status: 400,
@@ -273,14 +499,26 @@ export async function PUT(
       );
     }
 
-    /* -----------------------------------------------------
-       Validate online account
-    ----------------------------------------------------- */
+    if (saleAmount <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Cash + Online amount must be greater than zero.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const dbOnlineAccount =
+      normalizeOnlineAccount(
+        onlineAccount
+      );
 
     if (
-      paymentMethod === "Online" &&
-      onlineAccount !== "EasyPaisa" &&
-      onlineAccount !== "Bank Islami"
+      onlineAmount > 0 &&
+      !dbOnlineAccount
     ) {
       return NextResponse.json(
         {
@@ -293,37 +531,37 @@ export async function PUT(
       );
     }
 
-    /* -----------------------------------------------------
-       Check sale + month
-    ----------------------------------------------------- */
-
-    const existingRows =
-      await prisma.$queryRaw<
-        Array<{
-          id: number;
-          salesMonthId: number;
-          isClosed: boolean;
-        }>
-      >`
-        SELECT
-          s."id",
-          s."salesMonthId",
-          sm."isClosed"
-
-        FROM "sales" s
-
-        INNER JOIN "sales_months" sm
-          ON sm."id" = s."salesMonthId"
-
-        WHERE s."id" = ${id}
-
-        LIMIT 1
-      `;
-
-    if (existingRows.length === 0) {
+    if (
+      onlineAmount === 0 &&
+      onlineAccount
+    ) {
       return NextResponse.json(
         {
-          error: "Sale not found.",
+          error:
+            "Online account can only be selected when online amount is greater than zero.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const existingSale =
+      await prisma.sale.findUnique({
+        where: {
+          id,
+        },
+
+        include: {
+          salesMonth: true,
+        },
+      });
+
+    if (!existingSale) {
+      return NextResponse.json(
+        {
+          error:
+            "Sale not found.",
         },
         {
           status: 404,
@@ -331,14 +569,10 @@ export async function PUT(
       );
     }
 
-    const existing =
-      existingRows[0];
-
-    /* -----------------------------------------------------
-       Don't edit closed month
-    ----------------------------------------------------- */
-
-    if (existing.isClosed) {
+    if (
+      existingSale.salesMonth
+        .isClosed
+    ) {
       return NextResponse.json(
         {
           error:
@@ -350,133 +584,133 @@ export async function PUT(
       );
     }
 
-    /* -----------------------------------------------------
-       Convert payment values
-    ----------------------------------------------------- */
-
-    const dbPaymentMethod =
-      paymentMethod === "Cash"
-        ? "CASH"
-        : "ONLINE";
-
-    let dbOnlineAccount:
-      | string
-      | null = null;
-
-    if (paymentMethod === "Online") {
-      dbOnlineAccount =
-        onlineAccount === "EasyPaisa"
-          ? "EASYPAISA"
-          : "BANK_ISLAMI";
-    }
-
-    /* -----------------------------------------------------
-       Update sale
-    ----------------------------------------------------- */
-
-    await prisma.$executeRaw`
-      UPDATE "sales"
-
-      SET
-        "date" = ${new Date(
-          `${date}T00:00:00`
-        )},
-
-        "openingAmount" = ${openingAmount},
-
-        "saleAmount" = ${saleAmount},
-
-        "paymentMethod" = ${dbPaymentMethod},
-
-        "onlineAccount" = ${dbOnlineAccount},
-
-        "updatedAt" = NOW()
-
-      WHERE "id" = ${id}
-    `;
-
-    /* -----------------------------------------------------
-       Get updated sale
-    ----------------------------------------------------- */
-
-    const updatedRows =
-      await prisma.$queryRaw<
-        Array<{
-          id: number;
-          salesMonthId: number;
-          date: Date;
-          openingAmount: string | number;
-          expense: string | number;
-          saleAmount: string | number;
-          paymentMethod: string;
-          onlineAccount: string | null;
-        }>
-      >`
-        SELECT
-          "id",
-          "salesMonthId",
-          "date",
-          "openingAmount",
-          "expense",
-          "saleAmount",
-          "paymentMethod",
-          "onlineAccount"
-
-        FROM "sales"
-
-        WHERE "id" = ${id}
-
-        LIMIT 1
-      `;
-
-    if (updatedRows.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "Sale was updated but could not be loaded.",
-        },
-        {
-          status: 500,
-        }
+    const saleDate =
+      new Date(
+        `${date}T00:00:00`
       );
-    }
 
-    const sale =
-      updatedRows[0];
+    /*
+     * IMPORTANT:
+     *
+     * Recalculate expense based
+     * on the NEW sale date.
+     */
+    const dateExpense =
+      await getVendorExpenseForDate(
+        saleDate
+      );
+
+    const updatedSale =
+      await prisma.sale.update({
+        where: {
+          id,
+        },
+
+        data: {
+          date:
+            saleDate,
+
+          openingAmount:
+            openingAmount,
+
+          expense:
+            dateExpense,
+
+          cashAmount:
+            cashAmount,
+
+          onlineAmount:
+            onlineAmount,
+
+          saleAmount:
+            saleAmount,
+
+          paymentMethod:
+            onlineAmount > 0 &&
+            cashAmount === 0
+              ? "ONLINE"
+              : "CASH",
+
+          onlineAccount:
+            dbOnlineAccount,
+        },
+      });
+
+    /*
+     * Recalculate month closing.
+     */
+    const closing =
+      await recalculateMonth(
+        existingSale
+          .salesMonthId
+      );
+
+    await prisma.salesMonth.update({
+      where: {
+        id:
+          existingSale
+            .salesMonthId,
+      },
+
+      data: {
+        closingBalance:
+          closing.closing,
+      },
+    });
 
     return NextResponse.json({
       success: true,
 
       sale: {
-        id: sale.id,
+        id:
+          updatedSale.id,
 
         salesMonthId:
-          sale.salesMonthId,
+          updatedSale
+            .salesMonthId,
 
-        date: sale.date
-          .toISOString()
-          .split("T")[0],
+        date:
+          updatedSale.date
+            .toISOString()
+            .split("T")[0],
 
         openingAmount:
-          Number(sale.openingAmount),
+          Number(
+            updatedSale
+              .openingAmount
+          ),
 
         expense:
-          Number(sale.expense),
+          dateExpense,
+
+        cashAmount:
+          Number(
+            updatedSale
+              .cashAmount
+          ),
+
+        onlineAmount:
+          Number(
+            updatedSale
+              .onlineAmount
+          ),
 
         saleAmount:
-          Number(sale.saleAmount),
-
-        paymentMethod:
-          sale.paymentMethod === "CASH"
-            ? "Cash"
-            : "Online",
+          Number(
+            updatedSale
+              .saleAmount
+          ),
 
         onlineAccount:
-          sale.onlineAccount === "EASYPAISA"
+          updatedSale
+            .onlineAccount ===
+          "EASYPAISA"
             ? "EasyPaisa"
-            : sale.onlineAccount === "BANK_ISLAMI"
-              ? "Bank Islami"
-              : "",
+            : updatedSale
+                .onlineAccount ===
+              "BANK_ISLAMI"
+            ? "Bank Islami"
+            : "",
       },
     });
   } catch (error) {
@@ -488,7 +722,9 @@ export async function PUT(
     return NextResponse.json(
       {
         error:
-          "Unable to update sale.",
+          error instanceof Error
+            ? error.message
+            : "Unable to update sale.",
       },
       {
         status: 500,
@@ -504,18 +740,24 @@ export async function PUT(
 export async function DELETE(
   request: Request,
   context: {
-    params: Promise<{ id: string }>;
+    params: Promise<{
+      id: string;
+    }>;
   }
 ) {
   try {
-    const { id: idParam } = await context.params;
+    const {
+      id: idParam,
+    } = await context.params;
 
-    const id = getId(idParam);
+    const id =
+      getId(idParam);
 
     if (id === null) {
       return NextResponse.json(
         {
-          error: "Invalid sale ID.",
+          error:
+            "Invalid sale ID.",
         },
         {
           status: 400,
@@ -523,37 +765,22 @@ export async function DELETE(
       );
     }
 
-    /* -----------------------------------------------------
-       Check sale + month
-    ----------------------------------------------------- */
+    const existingSale =
+      await prisma.sale.findUnique({
+        where: {
+          id,
+        },
 
-    const rows =
-      await prisma.$queryRaw<
-        Array<{
-          id: number;
-          salesMonthId: number;
-          isClosed: boolean;
-        }>
-      >`
-        SELECT
-          s."id",
-          s."salesMonthId",
-          sm."isClosed"
+        include: {
+          salesMonth: true,
+        },
+      });
 
-        FROM "sales" s
-
-        INNER JOIN "sales_months" sm
-          ON sm."id" = s."salesMonthId"
-
-        WHERE s."id" = ${id}
-
-        LIMIT 1
-      `;
-
-    if (rows.length === 0) {
+    if (!existingSale) {
       return NextResponse.json(
         {
-          error: "Sale not found.",
+          error:
+            "Sale not found.",
         },
         {
           status: 404,
@@ -561,13 +788,10 @@ export async function DELETE(
       );
     }
 
-    const sale = rows[0];
-
-    /* -----------------------------------------------------
-       Don't delete closed month sale
-    ----------------------------------------------------- */
-
-    if (sale.isClosed) {
+    if (
+      existingSale.salesMonth
+        .isClosed
+    ) {
       return NextResponse.json(
         {
           error:
@@ -579,14 +803,36 @@ export async function DELETE(
       );
     }
 
-    /* -----------------------------------------------------
-       Delete
-    ----------------------------------------------------- */
+    await prisma.sale.delete({
+      where: {
+        id,
+      },
+    });
 
-    await prisma.$executeRaw`
-      DELETE FROM "sales"
-      WHERE "id" = ${id}
-    `;
+    /*
+     * Vendor bills remain untouched.
+     *
+     * Recalculate month after
+     * deleting the sale.
+     */
+    const closing =
+      await recalculateMonth(
+        existingSale
+          .salesMonthId
+      );
+
+    await prisma.salesMonth.update({
+      where: {
+        id:
+          existingSale
+            .salesMonthId,
+      },
+
+      data: {
+        closingBalance:
+          closing.closing,
+      },
+    });
 
     return NextResponse.json({
       success: true,
@@ -594,7 +840,7 @@ export async function DELETE(
       message:
         "Sale deleted successfully.",
 
-      id,
+      deletedId: id,
     });
   } catch (error) {
     console.error(
@@ -605,7 +851,9 @@ export async function DELETE(
     return NextResponse.json(
       {
         error:
-          "Unable to delete sale.",
+          error instanceof Error
+            ? error.message
+            : "Unable to delete sale.",
       },
       {
         status: 500,
@@ -613,3 +861,4 @@ export async function DELETE(
     );
   }
 }
+

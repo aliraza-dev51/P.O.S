@@ -49,8 +49,6 @@ import {
    TYPES
 ========================================================= */
 
-type PaymentMethod = "Cash" | "Online";
-
 type OnlineAccount = "EasyPaisa" | "Bank Islami";
 
 type Sale = {
@@ -60,7 +58,8 @@ type Sale = {
   openingAmount: number;
   expense: number;
   saleAmount: number;
-  paymentMethod: PaymentMethod;
+  cashAmount: number;
+  onlineAmount: number;
   onlineAccount: OnlineAccount | "";
 };
 
@@ -111,8 +110,8 @@ type ApiResponse = {
 type SaleForm = {
   date: string;
   openingAmount: string;
-  saleAmount: string;
-  paymentMethod: PaymentMethod;
+  cashAmount: string;
+  onlineAmount: string;
   onlineAccount: OnlineAccount | "";
 };
 
@@ -123,8 +122,8 @@ const getToday = () => {
 const createEmptyForm = (): SaleForm => ({
   date: getToday(),
   openingAmount: "",
-  saleAmount: "",
-  paymentMethod: "Cash",
+  cashAmount: "",
+  onlineAmount: "",
   onlineAccount: "",
 });
 
@@ -556,8 +555,8 @@ export default function SellPage() {
       date: getToday(),
       openingAmount:
         String(nextOpening),
-      saleAmount: "",
-      paymentMethod: "Cash",
+      cashAmount: "",
+      onlineAmount: "",
       onlineAccount: "",
     });
 
@@ -590,13 +589,11 @@ export default function SellPage() {
           sale.openingAmount
         ),
 
-      saleAmount:
-        String(
-          sale.saleAmount
-        ),
+      cashAmount:
+        String(sale.cashAmount ?? sale.saleAmount ?? 0),
 
-      paymentMethod:
-        sale.paymentMethod,
+      onlineAmount:
+        String(sale.onlineAmount ?? 0),
 
       onlineAccount:
         sale.onlineAccount,
@@ -640,50 +637,37 @@ export default function SellPage() {
         form.openingAmount
       );
 
-    const saleAmount =
-      Number(
-        form.saleAmount
-      );
+    const cashAmount = Number(form.cashAmount) || 0;
+    const onlineAmount = Number(form.onlineAmount) || 0;
+    const saleAmount = cashAmount + onlineAmount;
 
     if (!date) {
-      alert(
-        "Please select a date."
-      );
+      alert("Please select a date.");
       return;
     }
 
-    if (
-      !Number.isFinite(
-        openingAmount
-      ) ||
-      openingAmount < 0
-    ) {
-      alert(
-        "Please enter a valid opening amount."
-      );
+    if (!Number.isFinite(openingAmount) || openingAmount < 0) {
+      alert("Please enter a valid opening amount.");
       return;
     }
 
-    if (
-      !Number.isFinite(
-        saleAmount
-      ) ||
-      saleAmount <= 0
-    ) {
-      alert(
-        "Please enter a valid sale amount."
-      );
+    if (!Number.isFinite(cashAmount) || cashAmount < 0) {
+      alert("Please enter a valid cash amount.");
       return;
     }
 
-    if (
-      form.paymentMethod ===
-        "Online" &&
-      !form.onlineAccount
-    ) {
-      alert(
-        "Please select EasyPaisa or Bank Islami."
-      );
+    if (!Number.isFinite(onlineAmount) || onlineAmount < 0) {
+      alert("Please enter a valid online amount.");
+      return;
+    }
+
+    if (saleAmount <= 0) {
+      alert("Cash + Online amount must be greater than zero.");
+      return;
+    }
+
+    if (onlineAmount > 0 && !form.onlineAccount) {
+      alert("Please select EasyPaisa or Bank Islami for online payment.");
       return;
     }
 
@@ -695,16 +679,11 @@ export default function SellPage() {
 
         openingAmount,
 
+        cashAmount,
+        onlineAmount,
         saleAmount,
-
-        paymentMethod:
-          form.paymentMethod,
-
         onlineAccount:
-          form.paymentMethod ===
-          "Online"
-            ? form.onlineAccount
-            : null,
+          onlineAmount > 0 ? form.onlineAccount : null,
       };
 
       const url =
@@ -898,10 +877,9 @@ export default function SellPage() {
       form.openingAmount
     ) || 0;
 
-  const liveSale =
-    Number(
-      form.saleAmount
-    ) || 0;
+  const liveCash = Number(form.cashAmount) || 0;
+  const liveOnline = Number(form.onlineAmount) || 0;
+  const liveSale = liveCash + liveOnline;
 
   const liveBalance =
     liveOpening +
@@ -1694,22 +1672,22 @@ export default function SellPage() {
                         </TableCell>
 
                         <TableCell>
-                          {sale.paymentMethod ===
-                          "Cash" ? (
+                          <Stack spacing={0.5}>
                             <Chip
                               size="small"
-                              label="Cash"
+                              variant="outlined"
+                              label={`Cash: ${formatPrice(Number(sale.cashAmount || 0))}`}
+                              sx={{ width: "fit-content" }}
                             />
-                          ) : (
-                            <Chip
-                              size="small"
-                              color="primary"
-                              label={
-                                sale.onlineAccount ||
-                                "Online"
-                              }
-                            />
-                          )}
+                            {Number(sale.onlineAmount || 0) > 0 && (
+                              <Chip
+                                size="small"
+                                color="primary"
+                                label={`${sale.onlineAccount || "Online"}: ${formatPrice(Number(sale.onlineAmount || 0))}`}
+                                sx={{ width: "fit-content" }}
+                              />
+                            )}
+                          </Stack>
                         </TableCell>
 
                         <TableCell
@@ -2168,109 +2146,60 @@ export default function SellPage() {
               />
             </Grid>
 
-            <Grid size={12}>
+            <Grid
+              size={{ xs: 12, sm: 6 }}
+            >
               <TextField
                 fullWidth
-                label="Vendor Expense"
-                value={formatPrice(
-                  vendorExpense
-                )}
-                disabled
-                helperText="Automatically calculated from vendor bills."
-              />
-            </Grid>
-
-            <Grid size={12}>
-              <TextField
-                fullWidth
-                label="Sale Amount"
+                label="Cash Amount"
                 type="number"
-                value={
-                  form.saleAmount
-                }
+                value={form.cashAmount}
                 onChange={(event) =>
-                  updateForm(
-                    "saleAmount",
-                    event.target
-                      .value
-                  )
+                  updateForm("cashAmount", event.target.value)
                 }
                 slotProps={{
-                  htmlInput: {
-                    min: 0,
-                    step: "0.01",
-                  },
+                  htmlInput: { min: 0, step: "0.01" },
                 }}
               />
             </Grid>
 
             <Grid
-              size={{
-                xs: 12,
-                sm: 6,
-              }}
+              size={{ xs: 12, sm: 6 }}
             >
               <TextField
                 fullWidth
-                select
-                label="Payment Method"
-                value={
-                  form.paymentMethod
-                }
+                label="Online Amount"
+                type="number"
+                value={form.onlineAmount}
                 onChange={(event) =>
-                  updateForm(
-                    "paymentMethod",
-                    event.target
-                      .value
-                  )
+                  updateForm("onlineAmount", event.target.value)
                 }
-              >
-                <MenuItem value="Cash">
-                  Cash
-                </MenuItem>
-
-                <MenuItem value="Online">
-                  Online
-                </MenuItem>
-              </TextField>
+                helperText="Leave empty if there is no online sale."
+                slotProps={{
+                  htmlInput: { min: 0, step: "0.01" },
+                }}
+              />
             </Grid>
 
-            <Grid
-              size={{
-                xs: 12,
-                sm: 6,
-              }}
-            >
+            <Grid size={12}>
               <TextField
                 fullWidth
                 select
                 label="Online Account"
-                value={
-                  form.onlineAccount
-                }
-                disabled={
-                  form.paymentMethod !==
-                  "Online"
-                }
+                value={form.onlineAccount}
+                disabled={liveOnline <= 0}
                 onChange={(event) =>
-                  updateForm(
-                    "onlineAccount",
-                    event.target
-                      .value
-                  )
+                  updateForm("onlineAccount", event.target.value)
+                }
+                helperText={
+                  liveOnline > 0
+                    ? "Select where the online amount was received."
+                    : "Enabled automatically when Online Amount is greater than 0."
                 }
               >
-                <MenuItem value="">
-                  Select Account
-                </MenuItem>
-
-                <MenuItem value="EasyPaisa">
-                  EasyPaisa
-                </MenuItem>
-
-                <MenuItem value="Bank Islami">
-                  Bank Islami
-                </MenuItem>
+                <MenuItem value="">Select Account</MenuItem>
+                <MenuItem value="EasyPaisa">EasyPaisa</MenuItem>
+                <MenuItem value="Bank Islami">Bank Islami</MenuItem>
               </TextField>
             </Grid>
 
@@ -2352,7 +2281,7 @@ export default function SellPage() {
                     <Typography
                       color="text.secondary"
                     >
-                      Sale
+                      Total Sale
                     </Typography>
 
                     <Typography
@@ -2364,6 +2293,26 @@ export default function SellPage() {
                       {formatPrice(
                         liveSale
                       )}
+                    </Typography>
+                  </Stack>
+
+                  <Stack
+                    direction="row"
+                    sx={{ justifyContent: "space-between" }}
+                  >
+                    <Typography color="text.secondary">Cash</Typography>
+                    <Typography sx={{ fontWeight: 600 }}>
+                      {formatPrice(liveCash)}
+                    </Typography>
+                  </Stack>
+
+                  <Stack
+                    direction="row"
+                    sx={{ justifyContent: "space-between" }}
+                  >
+                    <Typography color="text.secondary">Online</Typography>
+                    <Typography sx={{ fontWeight: 600 }}>
+                      {formatPrice(liveOnline)}
                     </Typography>
                   </Stack>
 
