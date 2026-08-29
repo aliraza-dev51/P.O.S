@@ -682,8 +682,8 @@ export default function InvestPage() {
           <Grid container spacing={2} sx={{ pt: 1 }}>
             <Grid size={12}><TextField fullWidth label="Item Name" value={form.itemName} onChange={(event) => handleChange("itemName", event.target.value)} /></Grid>
             <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="Weight" type="number" value={form.weight} onChange={(event) => handleChange("weight", event.target.value)} slotProps={{ htmlInput: { min: 0, step: "any" } }} /></Grid>
-            <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="Quantity" type="number" value={form.quantity} onChange={(event) => handleChange("quantity", event.target.value)} slotProps={{ htmlInput: { min: 1, step: "any" } }} /></Grid>
-            <Grid size={12}><TextField fullWidth label="Quantity per Carton / Dozen" type="number" value={form.quantityPerPack} onChange={(event) => handleChange("quantityPerPack", event.target.value)} helperText="Example: 12 pieces in one carton" slotProps={{ htmlInput: { min: 1, step: "any" } }} /></Grid>
+            <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="Quantity per Carton / Dozen" type="number" value={form.quantity} onChange={(event) => handleChange("quantity", event.target.value)} slotProps={{ htmlInput: { min: 1, step: "any" } }} /></Grid>
+            <Grid size={12}><TextField fullWidth label="Quantity " type="number" value={form.quantityPerPack} onChange={(event) => handleChange("quantityPerPack", event.target.value)} helperText="Example: 12 pieces in one carton" slotProps={{ htmlInput: { min: 1, step: "any" } }} /></Grid>
             <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="Purchase Rate" type="number" value={form.rate} onChange={(event) => handleChange("rate", event.target.value)} slotProps={{ htmlInput: { min: 0, step: "any" } }} /></Grid>
             <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="Market Rate" type="number" value={form.marketRate} onChange={(event) => handleChange("marketRate", event.target.value)} slotProps={{ htmlInput: { min: 0, step: "any" } }} /></Grid>
 
