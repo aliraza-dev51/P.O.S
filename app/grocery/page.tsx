@@ -395,7 +395,7 @@ export default function GroceryPage() {
       <Stack direction={{ xs: "column", sm: "row" }} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, gap: 2, mb: 4 }}>
         <Box>
           <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-            <LocalGroceryStore color="primary" />
+            <LocalGroceryStore color="success" />
             <Typography variant="h4" sx={{ fontWeight: 700 }}>Grocery</Typography>
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Manage grocery items, costs and profits</Typography>

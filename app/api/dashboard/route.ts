@@ -73,13 +73,26 @@ export async function GET() {
     );
 
     // ==========================================
-    // CREDIT
+    // DAILY CREDIT OUTSTANDING
+    // Matches the Credit page "Daily Credit" summary logic:
+    // outstanding = (previousBalance + currentAmount) - paidAmount
+    // Only positive outstanding amounts are included.
     // ==========================================
 
-    const creditCustomers = await prisma.creditCustomer.findMany();
+    const dailyCreditCustomers = await prisma.creditCustomer.findMany({
+      where: {
+        creditType: "DAILY",
+      },
+    });
 
-    const totalCredit = creditCustomers.reduce(
-      (total, customer) => total + Number(customer.currentAmount),
+    const totalCredit = dailyCreditCustomers.reduce(
+      (total, customer) => {
+        const totalAmount =
+          Number(customer.previousBalance) + Number(customer.currentAmount);
+        const balance = totalAmount - Number(customer.paidAmount);
+
+        return total + (balance > 0 ? balance : 0);
+      },
       0
     );
 
@@ -325,6 +338,8 @@ export async function GET() {
 
         totalExpense: formatMoney(totalExpense),
 
+        todayCredit: formatMoney(totalCredit),
+
         totalCredit: formatMoney(totalCredit),
 
         totalInvestment: formatMoney(totalInvestment),
@@ -339,7 +354,7 @@ export async function GET() {
 
         transactions: todaySales.length,
 
-        creditCustomers: creditCustomers.length,
+        creditCustomers: dailyCreditCustomers.length,
 
         pendingBills: unpaidVendorBills.length,
       },

@@ -2,6 +2,7 @@ export type DashboardData = {
   stats: {
     todaySales: number;
     todayExpense: number;
+    todayCredit: number;
     totalCredit: number;
     totalInvestment: number;
     todayInvestment: number;

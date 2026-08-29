@@ -35,6 +35,7 @@ type DashboardData = {
   stats: {
     todaySales: number;
     todayExpense: number;
+    todayCredit: number;
     totalCredit: number;
     totalInvestment: number;
     todayInvestment: number;
@@ -148,9 +149,9 @@ export default function Dashboard() {
       icon: <ReceiptLong />,
     },
     {
-      title: "Credit",
-      value: money(data.stats.totalCredit),
-      subtitle: `${data.stats.creditCustomers} customers`,
+      title: "Today's Credit",
+      value: money(data.stats.todayCredit ?? data.stats.totalCredit ?? 0),
+      subtitle: `${data.stats.creditCustomers} daily customers`,
       icon: <CreditCard />,
     },
     {
