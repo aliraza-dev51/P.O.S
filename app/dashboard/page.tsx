@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 
 import {
   Box,
@@ -16,6 +16,8 @@ import {
   CircularProgress,
   Alert,
 } from "@mui/material";
+
+import { useDashboard } from "@/lib/hooks/useDashboard";
 
 import {
   ShoppingCart,
@@ -72,37 +74,11 @@ const money = (value: number) =>
   }).format(value);
 
 export default function Dashboard() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { data, isLoading, isError, error, refetch } = useDashboard();
 
   const loadDashboard = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const response = await fetch("/api/dashboard", {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error("Dashboard data load failed");
-      }
-
-      const result = await response.json();
-
-      setData(result);
-    } catch (error) {
-      console.error(error);
-      setError("Dashboard data load nahi ho saka.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
+    await refetch();
+  }, [refetch]);
 
   const chartDataset = useMemo(() => {
     return data?.chartData ?? [];
@@ -123,7 +99,7 @@ export default function Dashboard() {
     return money(item.value);
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Box
         sx={{
@@ -143,10 +119,10 @@ export default function Dashboard() {
     );
   }
 
-  if (error || !data) {
+  if (isError || !data) {
     return (
       <Box sx={{ p: 4 }}>
-        <Alert severity="error">{error}</Alert>
+        <Alert severity="error">{error instanceof Error ? error.message : "Dashboard data load nahi ho saka."}</Alert>
         <Button
           sx={{ mt: 2 }}
           variant="contained"

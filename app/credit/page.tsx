@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   Add,
@@ -10,7 +10,16 @@ import {
   Person,
   Payments,
   AccountBalanceWallet,
+  PrintOutlined,
+  Visibility,
 } from "@mui/icons-material";
+
+import {
+  useCreateCredit,
+  useCredits,
+  useDeleteCredit,
+  useUpdateCredit,
+} from "@/lib/hooks/useCredits";
 
 import {
   Box,
@@ -37,9 +46,17 @@ import {
   Typography,
 } from "@mui/material";
 
+type CreditType = "DAILY" | "MONTHLY";
+
 type CreditCustomer = {
   id: number;
   personName: string;
+  creditType: CreditType;
+  creditDate: string;
+  month: number;
+  year: number;
+  isClosed: boolean;
+  closedAt: string | null;
   previousBalance: number;
   currentAmount: number;
   paidAmount: number;
@@ -47,24 +64,37 @@ type CreditCustomer = {
 
 type CreditForm = {
   personName: string;
+  creditType: CreditType;
+  creditDate: string;
   currentAmount: string;
   paidAmount: string;
 };
 
 const emptyForm: CreditForm = {
   personName: "",
+  creditType: "DAILY",
+  creditDate: new Date().toISOString().split("T")[0],
   currentAmount: "",
   paidAmount: "",
 };
 
 export default function CreditPage() {
-  const [customers, setCustomers] =
-    useState<CreditCustomer[]>([]);
+  const [selectedType, setSelectedType] = useState<CreditType>("DAILY");
 
-  const [loading, setLoading] = useState(true);
+  const { data: customers = [], isLoading: loading } = useCredits(selectedType);
+  const createCreditMutation = useCreateCredit(selectedType);
+  const updateCreditMutation = useUpdateCredit(selectedType);
+  const deleteCreditMutation = useDeleteCredit(selectedType);
+
   const [saving, setSaving] = useState(false);
 
   const [open, setOpen] = useState(false);
+
+  const [printCustomer, setPrintCustomer] = useState<CreditCustomer | null>(null);
+
+  const [viewCustomer, setViewCustomer] = useState<CreditCustomer | null>(null);
+
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [editingId, setEditingId] =
     useState<number | null>(null);
@@ -72,24 +102,65 @@ export default function CreditPage() {
   const [form, setForm] =
     useState<CreditForm>(emptyForm);
 
-  const loadCustomers = async () => {
+  const filteredCustomers = useMemo(() => {
+    const keyword = searchTerm.trim().toLowerCase();
+
+    if (!keyword) {
+      return customers;
+    }
+
+    return customers.filter((customer) =>
+      customer.personName.toLowerCase().includes(keyword)
+    );
+  }, [customers, searchTerm]);
+
+  const matchedCustomer = useMemo(() => {
+    const keyword = form.personName.trim().toLowerCase();
+
+    if (!keyword) {
+      return null;
+    }
+
+    return (
+      customers.find(
+        (customer) =>
+          customer.personName.toLowerCase() === keyword &&
+          customer.creditType === form.creditType
+      ) ?? null
+    );
+  }, [customers, form.creditType, form.personName]);
+
+  const getMonthLabel = (month: number, year: number) =>
+    new Date(year, month - 1, 1).toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+    });
+
+  const closeCreditMonth = async (creditType: CreditType) => {
+    const today = new Date();
+    const month = today.getMonth() + 1;
+    const year = today.getFullYear();
+
     try {
-      setLoading(true);
-      const response = await fetch("/api/credits", { cache: "no-store" });
+      const response = await fetch("/api/credits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "close-month", creditType, month, year }),
+      });
+
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to load credit records.");
-      setCustomers(data);
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to close month.");
+      }
+
+      alert(`${creditType === "MONTHLY" ? "Monthly" : "Daily"} credit for ${getMonthLabel(month, year)} has been closed.`);
+      window.location.reload();
     } catch (error) {
       console.error(error);
-      alert(error instanceof Error ? error.message : "Failed to load credit records.");
-    } finally {
-      setLoading(false);
+      alert(error instanceof Error ? error.message : "Unable to close credit month.");
     }
   };
-
-  useEffect(() => {
-    loadCustomers();
-  }, []);
 
   const formatPrice = (value: number) =>
     `Rs. ${value.toLocaleString("en-PK", {
@@ -101,7 +172,7 @@ export default function CreditPage() {
    *
    * Previous Balance + Current Amount = Total
    *
-   * Total - Paid Amount = Remaining Balance
+   * Total - Paid Amount = Net Balance (can be negative for advance)
    */
   const getTotal = (customer: CreditCustomer) => {
     return (
@@ -111,10 +182,14 @@ export default function CreditPage() {
   };
 
   const getBalance = (customer: CreditCustomer) => {
-    return Math.max(
-      getTotal(customer) - customer.paidAmount,
-      0
-    );
+    // Net balance: positive = outstanding, negative = advance, zero = paid
+    return getTotal(customer) - customer.paidAmount;
+  };
+
+  const getBalanceDisplay = (balance: number) => {
+    if (balance > 0) return { label: "Outstanding", color: "error" as const, value: balance };
+    if (balance < 0) return { label: "Advance", color: "success" as const, value: Math.abs(balance) };
+    return { label: "Paid", color: "success" as const, value: 0 };
   };
 
   /*
@@ -122,7 +197,13 @@ export default function CreditPage() {
    */
   const openAddModal = () => {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm({
+      personName: "",
+      creditType: selectedType,
+      creditDate: new Date().toISOString().split("T")[0],
+      currentAmount: "",
+      paidAmount: "",
+    });
     setOpen(true);
   };
 
@@ -136,6 +217,10 @@ export default function CreditPage() {
 
     setForm({
       personName: customer.personName,
+      creditType: customer.creditType || "DAILY",
+      creditDate: customer.creditDate
+        ? customer.creditDate.split("T")[0]
+        : new Date().toISOString().split("T")[0],
       currentAmount: String(
         customer.currentAmount
       ),
@@ -152,6 +237,14 @@ export default function CreditPage() {
     setOpen(false);
     setEditingId(null);
     setForm(emptyForm);
+  };
+
+  const closePrintDialog = () => {
+    setPrintCustomer(null);
+  };
+
+  const closeViewDialog = () => {
+    setViewCustomer(null);
   };
 
   /*
@@ -181,15 +274,30 @@ export default function CreditPage() {
 
     try {
       setSaving(true);
-      const url = editingId !== null ? `/api/credits/${editingId}` : "/api/credits";
-      const response = await fetch(url, {
-        method: editingId !== null ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ personName, currentAmount, paidAmount }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to save credit record.");
-      await loadCustomers();
+
+      if (editingId !== null) {
+        // Editing existing record
+        await updateCreditMutation.mutateAsync({
+          id: editingId,
+          payload: {
+            personName,
+            creditType: form.creditType,
+            creditDate: form.creditDate,
+            currentAmount,
+            paidAmount,
+          },
+        });
+      } else {
+        // New entry (whether new customer or re-entry)
+        // The API will automatically calculate previousBalance
+        await createCreditMutation.mutateAsync({
+          personName,
+          creditType: form.creditType,
+          creditDate: form.creditDate,
+          currentAmount,
+          paidAmount,
+        });
+      }
       closeModal();
     } catch (error) {
       console.error(error);
@@ -210,10 +318,7 @@ export default function CreditPage() {
     if (!confirmed) return;
 
     try {
-      const response = await fetch(`/api/credits/${id}`, { method: "DELETE" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to delete credit record.");
-      setCustomers((current) => current.filter((item) => item.id !== id));
+      await deleteCreditMutation.mutateAsync(id);
     } catch (error) {
       console.error(error);
       alert(error instanceof Error ? error.message : "Failed to delete credit record.");
@@ -221,24 +326,33 @@ export default function CreditPage() {
   };
 
   /*
-   * Summary
+   * Summary - calculate only for selected credit type
    */
   const summary = useMemo(() => {
     let totalCredit = 0;
     let totalPaid = 0;
     let totalOutstanding = 0;
+    let totalAdvance = 0;
 
     customers.forEach((customer) => {
       const total = customer.previousBalance + customer.currentAmount;
+      const balance = total - customer.paidAmount;
+
       totalCredit += total;
       totalPaid += customer.paidAmount;
-      totalOutstanding += Math.max(total - customer.paidAmount, 0);
+
+      if (balance > 0) {
+        totalOutstanding += balance;
+      } else if (balance < 0) {
+        totalAdvance += Math.abs(balance);
+      }
     });
 
     return {
       totalCredit,
       totalPaid,
       totalOutstanding,
+      totalAdvance,
     };
   }, [customers]);
 
@@ -251,6 +365,28 @@ export default function CreditPage() {
         },
       }}
     >
+      {/* CREDIT TYPE SELECTOR */}
+
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          gap: 1,
+          flexWrap: "wrap",
+        }}
+      >
+        {(["DAILY", "MONTHLY"] as CreditType[]).map((type) => (
+          <Button
+            key={type}
+            variant={selectedType === type ? "contained" : "outlined"}
+            onClick={() => setSelectedType(type)}
+            size="small"
+          >
+            {type === "DAILY" ? "📅 Daily Credit" : "📆 Monthly Credit"}
+          </Button>
+        ))}
+      </Box>
+
       {/* HEADER */}
 
       <Stack
@@ -284,7 +420,7 @@ export default function CreditPage() {
                 fontWeight: 700,
               }}
             >
-              Credit / Khata
+              {selectedType === "DAILY" ? "Daily Credit" : "Monthly Credit"} / Khata
             </Typography>
           </Stack>
 
@@ -295,21 +431,55 @@ export default function CreditPage() {
               mt: 0.5,
             }}
           >
-            Manage customer credit and outstanding
-            balances
+            Manage {selectedType.toLowerCase()} customer credit and outstanding balances
           </Typography>
         </Box>
 
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={openAddModal}
-        >
-          Add Credit
-        </Button>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={() => closeCreditMonth(selectedType)}
+          >
+            Close {selectedType === "DAILY" ? "Daily" : "Monthly"}
+          </Button>
+
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={openAddModal}
+          >
+            Add {selectedType === "DAILY" ? "Daily" : "Monthly"} Credit
+          </Button>
+        </Stack>
       </Stack>
 
       {/* SUMMARY CARDS */}
+
+      <Box
+        sx={{
+          mb: 3,
+        }}
+      >
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Search customer by name"
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <Person sx={{ mr: 1, color: "text.secondary" }} fontSize="small" />
+              ),
+            },
+          }}
+          sx={{
+            maxWidth: 420,
+            bgcolor: "background.paper",
+          }}
+        />
+      </Box>
 
       <Grid
         container
@@ -529,6 +699,60 @@ export default function CreditPage() {
             </CardContent>
           </Card>
         </Grid>
+
+        {/* Advance */}
+
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            lg: 3,
+          }}
+        >
+          <Card
+            elevation={0}
+            sx={{
+              border: "1px solid",
+              borderColor: "success.main",
+              borderRadius: 3,
+            }}
+          >
+            <CardContent>
+              <Stack
+                direction="row"
+                sx={{
+                  justifyContent:
+                    "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <Box>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                  >
+                    Advance
+                  </Typography>
+
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      mt: 1,
+                      fontWeight: 700,
+                      color: "success.main",
+                    }}
+                  >
+                    {formatPrice(
+                      summary.totalAdvance
+                    )}
+                  </Typography>
+                </Box>
+
+                <Payments color="success" />
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
 
       {/* KHATA TABLE */}
@@ -651,6 +875,10 @@ export default function CreditPage() {
                     <b>Previous Balance</b>
                   </TableCell>
 
+                  <TableCell align="center">
+                    <b>Type</b>
+                  </TableCell>
+
                   <TableCell align="right">
                     <b>Current Amount</b>
                   </TableCell>
@@ -678,7 +906,7 @@ export default function CreditPage() {
               </TableHead>
 
               <TableBody>
-                {customers.map(
+                {filteredCustomers.map(
                   (customer, index) => {
                     const total =
                       getTotal(customer);
@@ -686,8 +914,8 @@ export default function CreditPage() {
                     const balance =
                       getBalance(customer);
 
-                    const fullyPaid =
-                      balance === 0;
+                    const balanceDisplay =
+                      getBalanceDisplay(balance);
 
                     return (
                       <TableRow
@@ -730,6 +958,15 @@ export default function CreditPage() {
                           )}
                         </TableCell>
 
+                        <TableCell align="center">
+                          <Chip
+                            size="small"
+                            label={customer.creditType === "MONTHLY" ? "Monthly" : "Daily"}
+                            color={customer.creditType === "MONTHLY" ? "secondary" : "primary"}
+                            variant="outlined"
+                          />
+                        </TableCell>
+
                         <TableCell align="right">
                           {formatPrice(
                             customer.currentAmount
@@ -761,27 +998,27 @@ export default function CreditPage() {
                         <TableCell
                           align="right"
                           sx={{
-                            color: fullyPaid
-                              ? "success.main"
-                              : "error.main",
+                            color: balanceDisplay.color === "error" 
+                              ? "error.main"
+                              : "success.main",
                             fontWeight: 700,
                           }}
                         >
-                          {formatPrice(balance)}
+                          {balanceDisplay.value > 0
+                            ? `+ ${formatPrice(balanceDisplay.value)}`
+                            : balanceDisplay.value < 0
+                            ? `- ${formatPrice(Math.abs(balanceDisplay.value))}`
+                            : formatPrice(0)}
                         </TableCell>
 
                         <TableCell align="center">
                           <Chip
                             size="small"
                             label={
-                              fullyPaid
-                                ? "Paid"
-                                : "Pending"
+                              balanceDisplay.label
                             }
                             color={
-                              fullyPaid
-                                ? "success"
-                                : "error"
+                              balanceDisplay.color
                             }
                             variant="outlined"
                           />
@@ -798,6 +1035,26 @@ export default function CreditPage() {
                             }
                           >
                             <EditOutlined fontSize="small" />
+                          </IconButton>
+
+                          <IconButton
+                            size="small"
+                            color="info"
+                            onClick={() =>
+                              setViewCustomer(customer)
+                            }
+                          >
+                            <Visibility fontSize="small" />
+                          </IconButton>
+
+                          <IconButton
+                            size="small"
+                            color="info"
+                            onClick={() =>
+                              setPrintCustomer(customer)
+                            }
+                          >
+                            <PrintOutlined fontSize="small" />
                           </IconButton>
 
                           <IconButton
@@ -864,12 +1121,18 @@ export default function CreditPage() {
                       sx={{
                         fontWeight: 700,
                         color:
-                          "error.main",
+                          summary.totalOutstanding > 0
+                            ? "error.main"
+                            : summary.totalAdvance > 0
+                            ? "success.main"
+                            : "default",
                       }}
                     >
-                      {formatPrice(
-                        summary.totalOutstanding
-                      )}
+                      {summary.totalOutstanding > 0
+                        ? `+ ${formatPrice(summary.totalOutstanding)}`
+                        : summary.totalAdvance > 0
+                        ? `- ${formatPrice(summary.totalAdvance)}`
+                        : formatPrice(0)}
                     </Typography>
                   </TableCell>
 
@@ -880,6 +1143,216 @@ export default function CreditPage() {
           </TableContainer>
         )}
       </Paper>
+
+      {/* VIEW DIALOG */}
+
+      <Dialog
+        open={Boolean(viewCustomer)}
+        onClose={closeViewDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+            Credit Statement
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent dividers>
+          {viewCustomer && (
+            <Box sx={{ p: 1 }}>
+              <Stack spacing={1.5}>
+                <Typography variant="h5" sx={{ fontWeight: 800 }}>{viewCustomer.personName}</Typography>
+                <Chip
+                  size="small"
+                  label={viewCustomer.creditType === "MONTHLY" ? "Monthly Credit" : "Daily Credit"}
+                  color={viewCustomer.creditType === "MONTHLY" ? "secondary" : "primary"}
+                  variant="outlined"
+                />
+                <Typography variant="body2" color="text.secondary">
+                  Period: {getMonthLabel(viewCustomer.month || new Date(viewCustomer.creditDate).getMonth() + 1, viewCustomer.year || new Date(viewCustomer.creditDate).getFullYear())}
+                </Typography>
+
+                <Divider />
+
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography>Previous Balance</Typography>
+                  <Typography sx={{ fontWeight: 600 }}>{formatPrice(viewCustomer.previousBalance)}</Typography>
+                </Box>
+
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography>Current Amount</Typography>
+                  <Typography sx={{ fontWeight: 600 }}>{formatPrice(viewCustomer.currentAmount)}</Typography>
+                </Box>
+
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography>Paid Amount</Typography>
+                  <Typography sx={{ fontWeight: 600, color: "success.main" }}>{formatPrice(viewCustomer.paidAmount)}</Typography>
+                </Box>
+
+                {(() => {
+                  const total = viewCustomer.previousBalance + viewCustomer.currentAmount;
+                  const balance = total - viewCustomer.paidAmount;
+                  const display = getBalanceDisplay(balance);
+                  return (
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <Typography>{display.label}</Typography>
+                      <Typography sx={{ fontWeight: 700, color: display.color === "error" ? "error.main" : "success.main" }}>
+                        {display.value > 0
+                          ? `+ ${formatPrice(display.value)}`
+                          : display.value < 0
+                          ? `- ${formatPrice(Math.abs(display.value))}`
+                          : formatPrice(0)}
+                      </Typography>
+                    </Box>
+                  );
+                })()}
+              </Stack>
+            </Box>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={closeViewDialog} color="inherit">
+            Close
+          </Button>
+
+          <Button
+            variant="contained"
+            onClick={() => {
+              setPrintCustomer(viewCustomer);
+              closeViewDialog();
+            }}
+            startIcon={<PrintOutlined />}
+          >
+            Print
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* PRINT DIALOG */}
+
+      <Dialog
+        open={Boolean(printCustomer)}
+        onClose={closePrintDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+            Print Khata
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent dividers>
+          {printCustomer && (
+            <Box
+              sx={{
+                p: 1,
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 2,
+                bgcolor: "background.paper",
+              }}
+            >
+              <Box sx={{ textAlign: "center", mb: 2 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                  POS Khata
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Customer Credit Receipt
+                </Typography>
+              </Box>
+
+              <Stack spacing={1.5}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography variant="subtitle2" color="text.secondary">Customer</Typography>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{printCustomer.personName}</Typography>
+                </Box>
+
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography variant="subtitle2" color="text.secondary">Type</Typography>
+                  <Chip
+                    size="small"
+                    label={printCustomer.creditType === "MONTHLY" ? "Monthly Credit" : "Daily Credit"}
+                    color={printCustomer.creditType === "MONTHLY" ? "secondary" : "primary"}
+                    variant="outlined"
+                  />
+                </Box>
+
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography variant="subtitle2" color="text.secondary">Date</Typography>
+                  <Typography>
+                    {new Date(printCustomer.creditDate).toLocaleDateString("en-PK", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </Typography>
+                </Box>
+
+                <Divider />
+
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography>Previous Balance</Typography>
+                  <Typography sx={{ fontWeight: 600 }}>{formatPrice(printCustomer.previousBalance)}</Typography>
+                </Box>
+
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography>Current Amount</Typography>
+                  <Typography sx={{ fontWeight: 600 }}>{formatPrice(printCustomer.currentAmount)}</Typography>
+                </Box>
+
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography>Paid Amount</Typography>
+                  <Typography sx={{ fontWeight: 600, color: "success.main" }}>{formatPrice(printCustomer.paidAmount)}</Typography>
+                </Box>
+
+                {(() => {
+                  const total = printCustomer.previousBalance + printCustomer.currentAmount;
+                  const balance = total - printCustomer.paidAmount;
+                  const display = getBalanceDisplay(balance);
+                  return (
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <Typography>{display.label}</Typography>
+                      <Typography sx={{ fontWeight: 700, color: display.color === "error" ? "error.main" : "success.main" }}>
+                        {display.value > 0
+                          ? `+ ${formatPrice(display.value)}`
+                          : display.value < 0
+                          ? `- ${formatPrice(Math.abs(display.value))}`
+                          : formatPrice(0)}
+                      </Typography>
+                    </Box>
+                  );
+                })()}
+
+                <Divider />
+
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography variant="subtitle2" color="text.secondary">Authorized By</Typography>
+                  <Typography sx={{ fontWeight: 700 }}>POS System</Typography>
+                </Box>
+              </Stack>
+            </Box>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={closePrintDialog} color="inherit">
+            Close
+          </Button>
+
+          <Button
+            variant="contained"
+            startIcon={<PrintOutlined />}
+            onClick={() => {
+              window.print();
+            }}
+          >
+            Print
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* ADD / EDIT MODAL */}
 
@@ -917,6 +1390,27 @@ export default function CreditPage() {
               pt: 1,
             }}
           >
+            {/* MODE */}
+            <Grid size={12}>
+              <Stack direction="row" spacing={1}>
+                {(["DAILY", "MONTHLY"] as CreditType[]).map((type) => (
+                  <Button
+                    key={type}
+                    variant={form.creditType === type ? "contained" : "outlined"}
+                    size="small"
+                    onClick={() =>
+                      setForm((previous) => ({
+                        ...previous,
+                        creditType: type,
+                      }))
+                    }
+                  >
+                    {type === "DAILY" ? "Daily Credit" : "Monthly Credit"}
+                  </Button>
+                ))}
+              </Stack>
+            </Grid>
+
             {/* PERSON NAME */}
 
             <Grid size={12}>
@@ -930,6 +1424,51 @@ export default function CreditPage() {
                     e.target.value
                   )
                 }
+              />
+            </Grid>
+
+            {matchedCustomer && (
+              <Grid size={12}>
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: "warning.light",
+                    color: "warning.contrastText",
+                  }}
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Previous record found for {matchedCustomer.personName}
+                  </Typography>
+                  <Typography variant="caption">
+                    Previous Balance: {formatPrice(matchedCustomer.previousBalance)} • Paid: {formatPrice(matchedCustomer.paidAmount)}
+                  </Typography>
+                </Box>
+              </Grid>
+            )}
+
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+              }}
+            >
+              <TextField
+                fullWidth
+                label="Credit Date"
+                type="date"
+                value={form.creditDate}
+                onChange={(e) =>
+                  setForm((previous) => ({
+                    ...previous,
+                    creditDate: e.target.value,
+                  }))
+                }
+                slotProps={{
+                  inputLabel: {
+                    shrink: true,
+                  },
+                }}
               />
             </Grid>
 

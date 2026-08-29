@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   Add,
@@ -15,6 +15,15 @@ import {
   Person,
   Visibility,
 } from "@mui/icons-material";
+
+import {
+  useAttendance,
+  useCreateEmployee,
+  useDeleteEmployee,
+  useEmployees,
+  useSaveAttendance,
+  useUpdateEmployee,
+} from "@/lib/hooks/useEmployees";
 
 import {
   Avatar,
@@ -106,11 +115,12 @@ const emptyForm: EmployeeForm = {
 ========================================================= */
 
 export default function EmployeesPage() {
-  const [employees, setEmployees] =
-    useState<Employee[]>(initialEmployees);
-
-  const [attendance, setAttendance] =
-    useState<Attendance[]>(initialAttendance);
+  const { data: employees = initialEmployees } = useEmployees();
+  const { data: attendance = initialAttendance } = useAttendance();
+  const createEmployeeMutation = useCreateEmployee();
+  const updateEmployeeMutation = useUpdateEmployee();
+  const deleteEmployeeMutation = useDeleteEmployee();
+  const saveAttendanceMutation = useSaveAttendance();
 
   const [employeeDialog, setEmployeeDialog] =
     useState(false);
@@ -126,45 +136,6 @@ export default function EmployeesPage() {
 
   const [form, setForm] =
     useState<EmployeeForm>(emptyForm);
-
-  /* =======================================================
-     LOAD DATABASE DATA
-  ======================================================= */
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [employeesRes, attendanceRes] = await Promise.all([
-          fetch("/api/employees", { cache: "no-store" }),
-          fetch("/api/attendance", { cache: "no-store" }),
-        ]);
-
-        if (!employeesRes.ok || !attendanceRes.ok) {
-          throw new Error("Failed to load employee data");
-        }
-
-        const employeesData = await employeesRes.json();
-        const attendanceData = await attendanceRes.json();
-
-        setEmployees(
-          employeesData.map((employee: any) => ({
-            ...employee,
-            salary: Number(employee.salary),
-            joiningDate: new Date(employee.joiningDate).toISOString().split("T")[0],
-            phone: employee.phone ?? "",
-            cnic: employee.cnic ?? "",
-            image: employee.image ?? "",
-          }))
-        );
-        setAttendance(attendanceData);
-      } catch (error) {
-        console.error("Unable to load employees/attendance:", error);
-        alert("Unable to load employee data from database.");
-      }
-    };
-
-    loadData();
-  }, []);
 
   /* =======================================================
      PRICE
@@ -323,22 +294,29 @@ export default function EmployeesPage() {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to save employee");
-
-      const savedEmployee: Employee = {
-        ...data,
-        salary: Number(data.salary),
-        joiningDate: new Date(data.joiningDate).toISOString().split("T")[0],
-        phone: data.phone ?? "",
-        cnic: data.cnic ?? "",
-        image: data.image ?? "",
-      };
-
       if (editingId !== null) {
-        setEmployees((current) => current.map((item) => item.id === editingId ? savedEmployee : item));
+        await updateEmployeeMutation.mutateAsync({
+          id: editingId,
+          payload: {
+            name,
+            phone,
+            cnic,
+            designation,
+            salary,
+            joiningDate: form.joiningDate,
+            image: form.image,
+          },
+        });
       } else {
-        setEmployees((current) => [...current, savedEmployee]);
+        await createEmployeeMutation.mutateAsync({
+          name,
+          phone,
+          cnic,
+          designation,
+          salary,
+          joiningDate: form.joiningDate,
+          image: form.image,
+        });
       }
 
       closeEmployeeDialog();
@@ -357,12 +335,7 @@ export default function EmployeesPage() {
     if (!confirmDelete) return;
 
     try {
-      const response = await fetch(`/api/employees/${employeeId}`, { method: "DELETE" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to delete employee");
-
-      setEmployees((current) => current.filter((employee) => employee.id !== employeeId));
-      setAttendance((current) => current.filter((record) => record.employeeId !== employeeId));
+      await deleteEmployeeMutation.mutateAsync(employeeId);
     } catch (error) {
       console.error(error);
       alert(error instanceof Error ? error.message : "Unable to delete employee.");
@@ -397,20 +370,13 @@ export default function EmployeesPage() {
     }
 
     try {
-      const response = await fetch("/api/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: employee.id,
-          date: today,
-          inTime: getCurrentTime(),
-          outTime: "",
-          status: "Present",
-        }),
+      await saveAttendanceMutation.mutateAsync({
+        employeeId: employee.id,
+        date: today,
+        inTime: getCurrentTime(),
+        outTime: "",
+        status: "Present",
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to check in");
-      setAttendance((current) => [...current, data]);
     } catch (error) {
       console.error(error);
       alert(error instanceof Error ? error.message : "Unable to check in.");
@@ -422,6 +388,7 @@ export default function EmployeesPage() {
   ======================================================= */
 
   const checkOut = async (employee: Employee) => {
+    const today = getToday();
     const existing = getTodayAttendance(employee.id);
 
     if (!existing) {
@@ -435,18 +402,13 @@ export default function EmployeesPage() {
     }
 
     try {
-      const response = await fetch(`/api/attendance/${existing.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inTime: existing.inTime,
-          outTime: getCurrentTime(),
-          status: existing.status,
-        }),
+      await saveAttendanceMutation.mutateAsync({
+        employeeId: employee.id,
+        date: today,
+        inTime: existing.inTime,
+        outTime: getCurrentTime(),
+        status: existing.status,
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to check out");
-      setAttendance((current) => current.map((record) => record.id === existing.id ? data : record));
     } catch (error) {
       console.error(error);
       alert(error instanceof Error ? error.message : "Unable to check out.");
@@ -477,25 +439,13 @@ export default function EmployeesPage() {
     const existing = attendance.find((record) => record.employeeId === employeeId && record.date === date);
 
     try {
-      const response = await fetch(existing ? `/api/attendance/${existing.id}` : "/api/attendance", {
-        method: existing ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId,
-          date,
-          inTime: existing?.inTime || "",
-          outTime: existing?.outTime || "",
-          status,
-        }),
+      await saveAttendanceMutation.mutateAsync({
+        employeeId,
+        date,
+        inTime: existing?.inTime || "",
+        outTime: existing?.outTime || "",
+        status,
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to mark attendance");
-
-      if (existing) {
-        setAttendance((current) => current.map((record) => record.id === existing.id ? data : record));
-      } else {
-        setAttendance((current) => [...current, data]);
-      }
     } catch (error) {
       console.error(error);
       alert(error instanceof Error ? error.message : "Unable to mark attendance.");

@@ -2,6 +2,8 @@
 
 import { SessionProvider } from "next-auth/react";
 
+import { AppQueryClientProvider } from "@/lib/query-client";
+
 export default function Providers({
   children,
 }: {
@@ -9,7 +11,7 @@ export default function Providers({
 }) {
   return (
     <SessionProvider>
-      {children}
+      <AppQueryClientProvider>{children}</AppQueryClientProvider>
     </SessionProvider>
   );
 }

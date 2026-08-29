@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   Add,
@@ -260,47 +260,53 @@ export default function InvestPage() {
      CALCULATIONS
   ======================================================= */
 
-  const calculateRatePerUnit = (
-    rate: number,
-    quantityPerPack: number
-  ) => {
-    if (quantityPerPack <= 0) {
-      return 0;
-    }
+  const calculateRatePerUnit = useCallback(
+    (rate: number, quantityPerPack: number) => {
+      if (quantityPerPack <= 0) {
+        return 0;
+      }
 
-    return rate / quantityPerPack;
-  };
+      return rate / quantityPerPack;
+    },
+    []
+  );
 
-  const calculateMarketRatePerUnit = (
-    marketRate: number,
-    quantityPerPack: number
-  ) => {
-    if (quantityPerPack <= 0) {
-      return 0;
-    }
+  const calculateMarketRatePerUnit = useCallback(
+    (marketRate: number, quantityPerPack: number) => {
+      if (quantityPerPack <= 0) {
+        return 0;
+      }
 
-    return marketRate / quantityPerPack;
-  };
+      return marketRate / quantityPerPack;
+    },
+    []
+  );
 
-  const calculateMarginPerUnit = (item: InvestItem) => {
-    return (
-      calculateMarketRatePerUnit(
-        item.marketRate,
-        item.quantityPerPack
-      ) -
-      calculateRatePerUnit(
-        item.rate,
-        item.quantityPerPack
-      )
-    );
-  };
+  const calculateMarginPerUnit = useCallback(
+    (item: InvestItem) => {
+      return (
+        calculateMarketRatePerUnit(
+          item.marketRate,
+          item.quantityPerPack
+        ) -
+        calculateRatePerUnit(
+          item.rate,
+          item.quantityPerPack
+        )
+      );
+    },
+    [calculateMarketRatePerUnit, calculateRatePerUnit]
+  );
 
-  const calculateProfit = (item: InvestItem) => {
-    return (
-      calculateMarginPerUnit(item) *
-      item.quantity
-    );
-  };
+  const calculateProfit = useCallback(
+    (item: InvestItem) => {
+      return (
+        calculateMarginPerUnit(item) *
+        item.quantity
+      );
+    },
+    [calculateMarginPerUnit]
+  );
 
   /* =======================================================
      LIVE MODAL CALCULATIONS
@@ -562,7 +568,7 @@ export default function InvestPage() {
       totalProfit,
       profitPercentage,
     };
-  }, [items]);
+  }, [calculateProfit, items]);
 
   /* =======================================================
      CARD STYLE

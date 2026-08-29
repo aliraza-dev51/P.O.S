@@ -1,4 +1,8 @@
-"use client";
+// This is a temporary Node script to create the new Grocery page
+const fs = require('fs');
+const path = require('path');
+
+const groceryPageContent = `"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -123,7 +127,7 @@ export default function GroceryPage() {
   const history = historyQuery.data ?? [];
 
   const formatPrice = (value: number) => {
-    return `Rs. ${value.toLocaleString("en-PK", { maximumFractionDigits: 2 })}`;
+    return \`Rs. \${value.toLocaleString("en-PK", { maximumFractionDigits: 2 })}\`;
   };
 
   const showSnackbar = (message: string, severity: "success" | "error") => {
@@ -255,7 +259,7 @@ export default function GroceryPage() {
   };
 
   const handleCloseMonth = async () => {
-    if (!window.confirm(`Are you sure you want to close ${MONTH_NAMES[currentMonth - 1]} ${currentYear} Grocery?`)) {
+    if (!window.confirm(\`Are you sure you want to close \${MONTH_NAMES[currentMonth - 1]} \${currentYear} Grocery?\`)) {
       return;
     }
 
@@ -278,27 +282,27 @@ export default function GroceryPage() {
       const totalSales = item.sellingPrice * item.weight * item.quantity;
       const totalCost = (item.rate + item.transportation) * item.quantity;
       const totalProfit = totalSales - totalCost;
-      return `
+      return \`
         <tr>
-          <td>${idx + 1}</td>
-          <td>${item.itemName}</td>
-          <td>${item.weight}</td>
-          <td>${item.quantity}</td>
-          <td>Rs. ${item.rate.toLocaleString()}</td>
-          <td>Rs. ${item.transportation.toLocaleString()}</td>
-          <td>Rs. ${costPerKg.toFixed(2)}</td>
-          <td>Rs. ${item.sellingPrice.toLocaleString()}</td>
-          <td>Rs. ${totalSales.toLocaleString("en-PK", { maximumFractionDigits: 2 })}</td>
-          <td>Rs. ${totalProfit.toLocaleString("en-PK", { maximumFractionDigits: 2 })}</td>
+          <td>\${idx + 1}</td>
+          <td>\${item.itemName}</td>
+          <td>\${item.weight}</td>
+          <td>\${item.quantity}</td>
+          <td>Rs. \${item.rate.toLocaleString()}</td>
+          <td>Rs. \${item.transportation.toLocaleString()}</td>
+          <td>Rs. \${costPerKg.toFixed(2)}</td>
+          <td>Rs. \${item.sellingPrice.toLocaleString()}</td>
+          <td>Rs. \${totalSales.toLocaleString("en-PK", { maximumFractionDigits: 2 })}</td>
+          <td>Rs. \${totalProfit.toLocaleString("en-PK", { maximumFractionDigits: 2 })}</td>
         </tr>
-      `;
+      \`;
     }).join("");
 
-    const printContent = `
+    const printContent = \`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Grocery Report - ${MONTH_NAMES[month.month - 1]} ${month.year}</title>
+        <title>Grocery Report - \${MONTH_NAMES[month.month - 1]} \${month.year}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; }
           h1 { text-align: center; }
@@ -312,9 +316,9 @@ export default function GroceryPage() {
       <body>
         <h1>GROCERY REPORT</h1>
         <div class="summary">
-          <p><strong>Month:</strong> ${MONTH_NAMES[month.month - 1]} ${month.year}</p>
-          <p><strong>Status:</strong> ${month.isClosed ? "CLOSED" : "OPEN"}</p>
-          ${month.closedAt ? `<p><strong>Closed Date:</strong> ${new Date(month.closedAt).toLocaleDateString()}</p>` : ""}
+          <p><strong>Month:</strong> \${MONTH_NAMES[month.month - 1]} \${month.year}</p>
+          <p><strong>Status:</strong> \${month.isClosed ? "CLOSED" : "OPEN"}</p>
+          \${month.closedAt ? \`<p><strong>Closed Date:</strong> \${new Date(month.closedAt).toLocaleDateString()}</p>\` : ""}
         </div>
         <table>
           <thead>
@@ -332,23 +336,23 @@ export default function GroceryPage() {
             </tr>
           </thead>
           <tbody>
-            ${itemRows}
+            \${itemRows}
           </tbody>
         </table>
         <div class="summary">
           <strong>Totals:</strong>
-          <p>Total Items: ${month.totalItems}</p>
-          <p>Total Weight: ${month.totalWeight.toLocaleString()} KG</p>
-          <p>Total Sales: Rs. ${month.totalSales.toLocaleString("en-PK", { maximumFractionDigits: 2 })}</p>
-          <p>Total Profit: Rs. ${month.totalProfit.toLocaleString("en-PK", { maximumFractionDigits: 2 })}</p>
+          <p>Total Items: \${month.totalItems}</p>
+          <p>Total Weight: \${month.totalWeight.toLocaleString()} KG</p>
+          <p>Total Sales: Rs. \${month.totalSales.toLocaleString("en-PK", { maximumFractionDigits: 2 })}</p>
+          <p>Total Profit: Rs. \${month.totalProfit.toLocaleString("en-PK", { maximumFractionDigits: 2 })}</p>
         </div>
         <div class="footer">
-          <p>Generated: ${new Date().toLocaleString()}</p>
+          <p>Generated: \${new Date().toLocaleString()}</p>
           <p>© Store Management System</p>
         </div>
       </body>
       </html>
-    `;
+    \`;
 
     const printWindow = window.open("", "", "width=900,height=600");
     if (printWindow) {
@@ -408,7 +412,7 @@ export default function GroceryPage() {
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, mb: 2 }}>
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 700 }}>CURRENT MONTH</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>${MONTH_NAMES[currentMonth - 1]} ${currentYear}</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>\${MONTH_NAMES[currentMonth - 1]} \${currentYear}</Typography>
               <Typography variant="body2" color="text.secondary">Status: {isClosed ? <Chip label="CLOSED" size="small" color="warning" /> : <Chip label="OPEN" size="small" color="success" />}</Typography>
             </Box>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
@@ -416,7 +420,7 @@ export default function GroceryPage() {
               {isClosed && <Chip icon={<Lock />} label="This month is closed" color="warning" />}
             </Stack>
           </Stack>
-          <TextField fullWidth placeholder="Search by item name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} slotProps={{ input: { startAdornment: <Search sx={{ mr: 1, color: "text.secondary" }} />, endAdornment: searchQuery && <IconButton size="small" onClick={() => setSearchQuery("")}><Close fontSize="small" /></IconButton>, } }} sx={{ mt: 2 }} />
+          <TextField fullWidth placeholder="Search by item name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: "text.secondary" }} />, endAdornment: searchQuery && <IconButton size="small" onClick={() => setSearchQuery("")}><Close fontSize="small" /></IconButton>, }} sx={{ mt: 2 }} />
         </CardContent>
       </Card>
 
@@ -434,7 +438,7 @@ export default function GroceryPage() {
               <Typography variant="h6" sx={{ fontWeight: 700 }}>Grocery Items</Typography>
               <Typography variant="body2" color="text.secondary">Inventory and profit calculation</Typography>
             </Box>
-            <Chip label={`${items.length} Items`} color="primary" variant="outlined" />
+            <Chip label={\`\${items.length} Items\`} color="primary" variant="outlined" />
           </Stack>
         </Box>
         <Divider />
@@ -500,16 +504,16 @@ export default function GroceryPage() {
         <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>PREVIOUS MONTHS / HISTORY</Typography>
         <Stack spacing={2}>
           {history.map((month) => (
-            <Card key={`${month.month}-${month.year}`} sx={{ border: "1px solid", borderColor: "divider" }}>
+            <Card key={\`\${month.month}-\${month.year}\`} sx={{ border: "1px solid", borderColor: "divider" }}>
               <CardContent>
                 <Stack direction={{ xs: "column", sm: "row" }} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, gap: 2 }}>
                   <Box>
-                    <Typography variant="body1" sx={{ fontWeight: 700 }}>${MONTH_NAMES[month.month - 1]} ${month.year}</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 700 }}>\${MONTH_NAMES[month.month - 1]} \${month.year}</Typography>
                     <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                       <Chip label="CLOSED" color="warning" size="small" icon={<Lock sx={{ fontSize: 16 }} />} />
                       {month.closedAt && <Typography variant="caption" color="text.secondary">Closed: {new Date(month.closedAt).toLocaleDateString()}</Typography>}
                     </Stack>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>${month.totalItems} items | {formatPrice(month.totalSales)} total sales</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>\${month.totalItems} items | {formatPrice(month.totalSales)} total sales</Typography>
                   </Box>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                     <Button variant="outlined" startIcon={<Visibility />} size="small" onClick={() => { setViewingMonth(month); setOpenViewModal(true); }}>View</Button>
@@ -555,7 +559,7 @@ export default function GroceryPage() {
 
       <Dialog open={openViewModal} onClose={closeViewModal} fullWidth maxWidth="lg">
         <DialogTitle>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>{viewingMonth ? `${MONTH_NAMES[viewingMonth.month - 1]} ${viewingMonth.year} - Grocery Record` : ""}</Typography>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>{viewingMonth ? \`\${MONTH_NAMES[viewingMonth.month - 1]} \${viewingMonth.year} - Grocery Record\` : ""}</Typography>
           <Typography variant="body2" color="text.secondary">Historical record - Read only</Typography>
         </DialogTitle>
         <DialogContent dividers>
@@ -621,3 +625,9 @@ export default function GroceryPage() {
     </Box>
   );
 }
+`;
+
+const targetPath = path.join('d:', 'Vpos', 'P.O.S-main', 'P.O.S-main', 'app', 'grocery', 'page.tsx');
+
+fs.writeFileSync(targetPath, groceryPageContent, 'utf-8');
+console.log('Grocery page file updated successfully');

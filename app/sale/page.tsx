@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  useCloseSalesMonth,
+  useCreateSale,
+  useDeleteSale,
+  useSales,
+  useUpdateSale,
+} from "@/lib/hooks/useSales";
+
+import {
   Add,
   ArrowBackIosNew,
   ArrowForwardIos,
@@ -198,28 +206,37 @@ export default function SellPage() {
   const [selectedYear, setSelectedYear] =
     useState<number>(initialMonth.year);
 
-  const [activeMonth, setActiveMonth] =
-    useState<SalesMonth | null>(null);
+  const salesQuery = useSales();
+  const createSaleMutation = useCreateSale();
+  const updateSaleMutation = useUpdateSale();
+  const deleteSaleMutation = useDeleteSale();
+  const closeMonthMutation = useCloseSalesMonth();
 
-  const [history, setHistory] =
-    useState<SalesMonth[]>([]);
+  const sales = useMemo(
+    () => salesQuery.data?.sales ?? [],
+    [salesQuery.data?.sales]
+  );
 
-  /* =======================================================
-     SALES
-  ======================================================= */
+  const history = useMemo(
+    () => salesQuery.data?.history ?? [],
+    [salesQuery.data?.history]
+  );
 
-  const [sales, setSales] =
-    useState<Sale[]>([]);
+  const activeMonth = useMemo(
+    () => salesQuery.data?.activeMonth ?? salesQuery.data?.month ?? null,
+    [salesQuery.data?.activeMonth, salesQuery.data?.month]
+  );
 
-  const [vendorExpense, setVendorExpense] =
-    useState<number>(0);
+  const vendorExpense = useMemo(
+    () => Number(salesQuery.data?.vendorExpense ?? 0),
+    [salesQuery.data?.vendorExpense]
+  );
 
   /* =======================================================
      UI
   ======================================================= */
 
-  const [loading, setLoading] =
-    useState<boolean>(true);
+  const loading = salesQuery.isLoading;
 
   const [saving, setSaving] =
     useState<boolean>(false);
@@ -254,94 +271,28 @@ export default function SellPage() {
      Therefore the page loads that endpoint directly.
   ======================================================= */
 
-  const loadSales = useCallback(
-    async () => {
-      setLoading(true);
-      setError("");
+  const loadSales = useCallback(async () => {
+    setError("");
 
-      try {
-        const response = await fetch(
-          "/api/sales",
-          {
-            method: "GET",
-            cache: "no-store",
-          }
-        );
-
-        const data: ApiResponse =
-          await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            data.error ||
-              "Unable to load sales."
-          );
-        }
-
-        const month =
-          data.activeMonth ??
-          data.month ??
-          null;
-
-        setSales(data.sales ?? []);
-
-        setVendorExpense(
-          Number(
-            data.vendorExpense ?? 0
-          )
-        );
-
-        setHistory(
-          data.history ??
-            data.months ??
-            []
-        );
-
-        setActiveMonth(month);
-
-        /*
-         * If backend returned a month,
-         * sync the selector with it.
-         */
-        if (month) {
-          setSelectedMonth(
-            month.month
-          );
-
-          setSelectedYear(
-            month.year
-          );
-        }
-      } catch (err) {
-        console.error(
-          "SellPage load error:",
-          err
-        );
-
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load sales."
-        );
-
-        setSales([]);
-        setHistory([]);
-        setActiveMonth(null);
-        setVendorExpense(0);
-      } finally {
-        setLoading(false);
+    try {
+      const result = await salesQuery.refetch();
+      if (result.isError) {
+        throw result.error;
       }
-    },
-    []
-  );
-
-  /* =======================================================
-     INITIAL LOAD
-  ======================================================= */
+    } catch (err) {
+      console.error("SellPage load error:", err);
+      setError(
+        err instanceof Error ? err.message : "Unable to load sales."
+      );
+    }
+  }, [salesQuery]);
 
   useEffect(() => {
-    void loadSales();
-  }, [loadSales]);
+    if (activeMonth) {
+      setSelectedMonth(activeMonth.month);
+      setSelectedYear(activeMonth.year);
+    }
+  }, [activeMonth]);
 
   /* =======================================================
      REFRESH
@@ -696,28 +647,13 @@ export default function SellPage() {
           ? "POST"
           : "PUT";
 
-      const response =
-        await fetch(url, {
-          method,
-
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify(
-            payload
-          ),
+      if (editingId === null) {
+        await createSaleMutation.mutateAsync(payload);
+      } else {
+        await updateSaleMutation.mutateAsync({
+          id: editingId,
+          payload,
         });
-
-      const data: ApiResponse =
-        await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to save sale."
-        );
       }
 
       setOpenDialog(false);
@@ -725,8 +661,6 @@ export default function SellPage() {
       setForm(
         createEmptyForm()
       );
-
-      await loadSales();
     } catch (err) {
       console.error(
         "Save sale error:",
@@ -769,25 +703,7 @@ export default function SellPage() {
     setDeletingId(id);
 
     try {
-      const response =
-        await fetch(
-          `/api/sales/${id}`,
-          {
-            method: "DELETE",
-          }
-        );
-
-      const data: ApiResponse =
-        await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to delete sale."
-        );
-      }
-
-      await loadSales();
+      await deleteSaleMutation.mutateAsync(id);
     } catch (err) {
       console.error(
         "Delete sale error:",
@@ -827,31 +743,8 @@ export default function SellPage() {
       setClosingMonth(true);
 
       try {
-        const response =
-          await fetch(
-            `/api/sales/months/${activeMonth.id}/close`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-            }
-          );
-
-        const data: ApiResponse =
-          await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            data.error ||
-              "Unable to close month."
-          );
-        }
-
+        await closeMonthMutation.mutateAsync(activeMonth.id);
         setCloseDialog(false);
-
-        await loadSales();
       } catch (err) {
         console.error(
           "Close month error:",

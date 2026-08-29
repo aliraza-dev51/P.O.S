@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   Add,
@@ -8,6 +8,13 @@ import {
   EditOutlined,
   Storefront,
 } from "@mui/icons-material";
+
+import {
+  useCreateVendor,
+  useDeleteVendor,
+  useUpdateVendor,
+  useVendors,
+} from "@/lib/hooks/useVendors";
 
 import {
   Box,
@@ -72,8 +79,10 @@ const emptyForm: VendorForm = {
 ========================================================= */
 
 export default function VendorsPage() {
-  const [items, setItems] =
-    useState<VendorItem[]>(initialItems);
+  const { data: items = initialItems, isLoading: loading } = useVendors();
+  const createVendorMutation = useCreateVendor();
+  const updateVendorMutation = useUpdateVendor();
+  const deleteVendorMutation = useDeleteVendor();
 
   const [open, setOpen] =
     useState(false);
@@ -84,27 +93,7 @@ export default function VendorsPage() {
   const [form, setForm] =
     useState<VendorForm>(emptyForm);
 
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  const loadItems = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch("/api/vendors", { cache: "no-store" });
-      if (!response.ok) throw new Error("Failed to load vendor bills");
-      const data = await response.json();
-      setItems(data);
-    } catch (error) {
-      console.error("Unable to load vendors:", error);
-      alert("Unable to load vendor bills from database.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadItems();
-  }, []);
 
   /* =======================================================
      FORMAT PRICE
@@ -224,7 +213,23 @@ export default function VendorsPage() {
         throw new Error(data?.error || "Unable to save vendor bill");
       }
 
-      await loadItems();
+      if (editingId !== null) {
+        await updateVendorMutation.mutateAsync({
+          id: editingId,
+          payload: {
+            vendorName,
+            billAmount,
+            status: form.status,
+          },
+        });
+      } else {
+        await createVendorMutation.mutateAsync({
+          vendorName,
+          billAmount,
+          status: form.status,
+        });
+      }
+
       closeModal();
     } catch (error) {
       console.error("Unable to save vendor bill:", error);
@@ -255,7 +260,7 @@ export default function VendorsPage() {
         throw new Error(data?.error || "Unable to delete vendor bill");
       }
 
-      await loadItems();
+      await deleteVendorMutation.mutateAsync(id);
     } catch (error) {
       console.error("Unable to delete vendor bill:", error);
       alert(error instanceof Error ? error.message : "Unable to delete vendor bill.");
