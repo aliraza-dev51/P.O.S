@@ -146,18 +146,24 @@ model VendorBill {
 }
 
 model Investment {
-  id              Int      @id @default(autoincrement())
-  dateTime        DateTime @default(now())
+  id              Int       @id @default(autoincrement())
+  dateTime        DateTime  @default(now())
   itemName        String
-  weight          Decimal  @db.Decimal(12, 3)
+  weight          Decimal   @db.Decimal(12, 3)
   quantity        Int
   quantityPerPack Int
-  rate            Decimal  @db.Decimal(12, 2)
-  marketRate      Decimal  @db.Decimal(12, 2)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  rate            Decimal   @db.Decimal(12, 2)
+  marketRate      Decimal   @db.Decimal(12, 2)
+  month           Int       @default(1)
+  year            Int       @default(2024)
+  isClosed        Boolean   @default(false)
+  closedAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([dateTime])
+  @@index([year, month])
+  @@index([isClosed])
   @@map("investments")
 }
 

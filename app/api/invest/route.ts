@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-/* =========================================================
-   HELPER
-========================================================= */
+const toNumber = (value: unknown) => Number(value ?? 0);
+
+const getMonthYearFromDate = (dateValue?: string | Date) => {
+  const date = new Date(dateValue ?? Date.now());
+  return { month: date.getMonth() + 1, year: date.getFullYear() };
+};
 
 function serializeInvestment(investment: {
   id: number;
@@ -14,88 +17,48 @@ function serializeInvestment(investment: {
   quantityPerPack: number;
   rate: unknown;
   marketRate: unknown;
+  month: number;
+  year: number;
+  isClosed: boolean;
+  closedAt: Date | null;
 }) {
   return {
     id: investment.id,
     dateTime: investment.dateTime.toISOString(),
     itemName: investment.itemName,
-
     weight: Number(investment.weight),
-
     quantity: investment.quantity,
-
-    quantityPerPack:
-      investment.quantityPerPack,
-
+    quantityPerPack: investment.quantityPerPack,
     rate: Number(investment.rate),
-
-    marketRate: Number(
-      investment.marketRate
-    ),
+    marketRate: Number(investment.marketRate),
+    month: investment.month,
+    year: investment.year,
+    isClosed: investment.isClosed,
+    closedAt: investment.closedAt ? investment.closedAt.toISOString() : null,
   };
 }
 
-/* =========================================================
-   VALIDATION
-========================================================= */
-
 function validateInvestment(body: unknown) {
-  if (
-    typeof body !== "object" ||
-    body === null
-  ) {
-    return null;
-  }
+  if (typeof body !== "object" || body === null) return null;
 
-  const data = body as Record<
-    string,
-    unknown
-  >;
-
-  const itemName = String(
-    data.itemName ?? ""
-  ).trim();
-
-  const weight = Number(
-    data.weight
-  );
-
-  const quantity = Number(
-    data.quantity
-  );
-
-  const quantityPerPack = Number(
-    data.quantityPerPack
-  );
-
-  const rate = Number(
-    data.rate
-  );
-
-  const marketRate = Number(
-    data.marketRate
-  );
-
-  /* -----------------------------
-     CHECK NUMBER VALUES
-  ----------------------------- */
+  const data = body as Record<string, unknown>;
+  const itemName = String(data.itemName ?? "").trim();
+  const weight = Number(data.weight);
+  const quantity = Number(data.quantity);
+  const quantityPerPack = Number(data.quantityPerPack);
+  const rate = Number(data.rate);
+  const marketRate = Number(data.marketRate);
 
   if (
     !itemName ||
     !Number.isFinite(weight) ||
     !Number.isFinite(quantity) ||
-    !Number.isFinite(
-      quantityPerPack
-    ) ||
+    !Number.isFinite(quantityPerPack) ||
     !Number.isFinite(rate) ||
     !Number.isFinite(marketRate)
   ) {
     return null;
   }
-
-  /* -----------------------------
-     CHECK POSITIVE VALUES
-  ----------------------------- */
 
   if (
     weight <= 0 ||
@@ -107,16 +70,7 @@ function validateInvestment(body: unknown) {
     return null;
   }
 
-  /* -----------------------------
-     INTEGER VALUES
-  ----------------------------- */
-
-  if (
-    !Number.isInteger(quantity) ||
-    !Number.isInteger(
-      quantityPerPack
-    )
-  ) {
+  if (!Number.isInteger(quantity) || !Number.isInteger(quantityPerPack)) {
     return null;
   }
 
@@ -127,373 +81,175 @@ function validateInvestment(body: unknown) {
     quantityPerPack,
     rate,
     marketRate,
+    dateTime: data.dateTime ? new Date(String(data.dateTime)) : new Date(),
   };
 }
 
-/* =========================================================
-   GET
-   GET /api/investments
-
-   PostgreSQL se tamam investments
-========================================================= */
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const investments =
-      await prisma.investment.findMany({
-        orderBy: {
-          dateTime: "desc",
-        },
+    const url = new URL(request.url);
+    const closed = url.searchParams.get("closed");
+    const month = url.searchParams.get("month");
+    const year = url.searchParams.get("year");
+    const search = url.searchParams.get("search");
+
+    if (closed === "true") {
+      const closedMonths = await prisma.investment.groupBy({
+        by: ["month", "year"],
+        where: { isClosed: true },
+        orderBy: [{ year: "desc" }, { month: "desc" }],
       });
 
-    const data =
-      investments.map(
-        serializeInvestment
+      const history = await Promise.all(
+        closedMonths.map(async (monthYear) => {
+          const items = await prisma.investment.findMany({
+            where: { month: monthYear.month, year: monthYear.year, isClosed: true },
+            orderBy: { dateTime: "desc" },
+          });
+
+          let totalInvestment = 0;
+          let totalMarketValue = 0;
+          let totalProfit = 0;
+
+          items.forEach((item) => {
+            const investmentValue = toNumber(item.rate) * item.quantity;
+            const marketValue = toNumber(item.marketRate) * item.quantity;
+            const profit = (toNumber(item.marketRate) - toNumber(item.rate)) * item.quantity;
+            totalInvestment += investmentValue;
+            totalMarketValue += marketValue;
+            totalProfit += profit;
+          });
+
+          return {
+            month: monthYear.month,
+            year: monthYear.year,
+            isClosed: true,
+            closedAt: items[0]?.closedAt ? items[0].closedAt.toISOString() : null,
+            items: items.map(serializeInvestment),
+            totalItems: items.length,
+            totalInvestment,
+            totalMarketValue,
+            totalProfit,
+          };
+        })
       );
 
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error(
-      "GET INVESTMENTS ERROR:",
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          "Failed to fetch investments",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
-}
-
-/* =========================================================
-   POST
-   POST /api/investments
-
-   PostgreSQL mein new investment save
-========================================================= */
-
-export async function POST(
-  request: NextRequest
-) {
-  try {
-    const body =
-      await request.json();
-
-    const data =
-      validateInvestment(body);
-
-    if (!data) {
-      return NextResponse.json(
-        {
-          error:
-            "Invalid investment data",
-        },
-        {
-          status: 400,
-        }
-      );
+      return NextResponse.json(history);
     }
 
-    const investment =
-      await prisma.investment.create({
-        data: {
-          itemName: data.itemName,
+    const { month: currentMonth, year: currentYear } = getMonthYearFromDate();
+    const targetMonth = month ? Number(month) : currentMonth;
+    const targetYear = year ? Number(year) : currentYear;
 
-          weight: data.weight,
+    const whereClause: any = {
+      month: targetMonth,
+      year: targetYear,
+      isClosed: false,
+    };
 
-          quantity: data.quantity,
-
-          quantityPerPack:
-            data.quantityPerPack,
-
-          rate: data.rate,
-
-          marketRate:
-            data.marketRate,
-        },
-      });
-
-    return NextResponse.json(
-      serializeInvestment(
-        investment
-      ),
-      {
-        status: 201,
-      }
-    );
-  } catch (error) {
-    console.error(
-      "POST INVESTMENT ERROR:",
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          "Failed to create investment",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
-}
-
-/* =========================================================
-   PUT
-   PUT /api/investments
-
-   Existing investment update
-========================================================= */
-
-export async function PUT(
-  request: NextRequest
-) {
-  try {
-    const body =
-      await request.json();
-
-    if (
-      typeof body !== "object" ||
-      body === null
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Invalid request body",
-        },
-        {
-          status: 400,
-        }
-      );
+    if (search && search.trim()) {
+      whereClause.itemName = { contains: search.trim(), mode: "insensitive" };
     }
 
-    const data =
-      body as Record<
-        string,
-        unknown
-      >;
+    const items = await prisma.investment.findMany({
+      where: whereClause,
+      orderBy: { dateTime: "desc" },
+    });
 
-    const id = Number(
-      data.id
-    );
+    const existingClosed = await prisma.investment.findFirst({
+      where: { month: targetMonth, year: targetYear, isClosed: true },
+    });
 
-    /* -----------------------------
-       CHECK ID
-    ----------------------------- */
+    let totalInvestment = 0;
+    let totalMarketValue = 0;
+    let totalProfit = 0;
 
-    if (
-      !Number.isInteger(id) ||
-      id <= 0
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Invalid investment ID",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /* -----------------------------
-       VALIDATE DATA
-    ----------------------------- */
-
-    const investmentData =
-      validateInvestment(body);
-
-    if (!investmentData) {
-      return NextResponse.json(
-        {
-          error:
-            "Invalid investment data",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /* -----------------------------
-       CHECK EXISTING
-    ----------------------------- */
-
-    const existing =
-      await prisma.investment.findUnique(
-        {
-          where: {
-            id,
-          },
-        }
-      );
-
-    if (!existing) {
-      return NextResponse.json(
-        {
-          error:
-            "Investment not found",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
-
-    /* -----------------------------
-       UPDATE DATABASE
-    ----------------------------- */
-
-    const investment =
-      await prisma.investment.update({
-        where: {
-          id,
-        },
-
-        data: {
-          itemName:
-            investmentData.itemName,
-
-          weight:
-            investmentData.weight,
-
-          quantity:
-            investmentData.quantity,
-
-          quantityPerPack:
-            investmentData.quantityPerPack,
-
-          rate:
-            investmentData.rate,
-
-          marketRate:
-            investmentData.marketRate,
-        },
-      });
-
-    return NextResponse.json(
-      serializeInvestment(
-        investment
-      )
-    );
-  } catch (error) {
-    console.error(
-      "PUT INVESTMENT ERROR:",
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          "Failed to update investment",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
-}
-
-/* =========================================================
-   DELETE
-   DELETE /api/investments
-
-   PostgreSQL se investment delete
-========================================================= */
-
-export async function DELETE(
-  request: NextRequest
-) {
-  try {
-    const body =
-      await request.json();
-
-    const id = Number(
-      body?.id
-    );
-
-    /* -----------------------------
-       CHECK ID
-    ----------------------------- */
-
-    if (
-      !Number.isInteger(id) ||
-      id <= 0
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Invalid investment ID",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /* -----------------------------
-       CHECK EXISTING
-    ----------------------------- */
-
-    const existing =
-      await prisma.investment.findUnique(
-        {
-          where: {
-            id,
-          },
-        }
-      );
-
-    if (!existing) {
-      return NextResponse.json(
-        {
-          error:
-            "Investment not found",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
-
-    /* -----------------------------
-       DELETE
-    ----------------------------- */
-
-    await prisma.investment.delete({
-      where: {
-        id,
-      },
+    items.forEach((item) => {
+      totalInvestment += toNumber(item.rate) * item.quantity;
+      totalMarketValue += toNumber(item.marketRate) * item.quantity;
+      totalProfit += (toNumber(item.marketRate) - toNumber(item.rate)) * item.quantity;
     });
 
     return NextResponse.json({
-      success: true,
-
-      message:
-        "Investment deleted successfully",
-
-      id,
+      month: targetMonth,
+      year: targetYear,
+      isClosed: existingClosed !== null,
+      closedAt: existingClosed?.closedAt ? existingClosed.closedAt.toISOString() : null,
+      items: items.map(serializeInvestment),
+      totalItems: items.length,
+      totalInvestment,
+      totalMarketValue,
+      totalProfit,
     });
   } catch (error) {
-    console.error(
-      "DELETE INVESTMENT ERROR:",
-      error
-    );
+    console.error("GET INVESTMENTS ERROR:", error);
+    return NextResponse.json({ error: "Failed to fetch investments" }, { status: 500 });
+  }
+}
 
-    return NextResponse.json(
-      {
-        error:
-          "Failed to delete investment",
-      },
-      {
-        status: 500,
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+
+    if (body?.action === "close-month") {
+      const month = Number(body.month ?? 0);
+      const year = Number(body.year ?? 0);
+
+      if (!Number.isFinite(month) || month < 1 || month > 12) {
+        return NextResponse.json({ error: "Invalid month." }, { status: 400 });
       }
-    );
+
+      if (!Number.isFinite(year)) {
+        return NextResponse.json({ error: "Invalid year." }, { status: 400 });
+      }
+
+      const alreadyClosed = await prisma.investment.findFirst({
+        where: { month, year, isClosed: true },
+      });
+
+      if (alreadyClosed) {
+        return NextResponse.json({ error: "This month is already closed." }, { status: 400 });
+      }
+
+      await prisma.investment.updateMany({
+        where: { month, year, isClosed: false },
+        data: { isClosed: true, closedAt: new Date() },
+      });
+
+      return NextResponse.json({ message: "Month closed successfully", month, year, isClosed: true });
+    }
+
+    const data = validateInvestment(body);
+    if (!data) {
+      return NextResponse.json({ error: "Invalid investment data" }, { status: 400 });
+    }
+
+    const { month, year } = getMonthYearFromDate(data.dateTime);
+    const alreadyClosed = await prisma.investment.findFirst({
+      where: { month, year, isClosed: true },
+    });
+
+    if (alreadyClosed) {
+      return NextResponse.json({ error: "This month is closed. You cannot add new investments here." }, { status: 400 });
+    }
+
+    const investment = await prisma.investment.create({
+      data: {
+        itemName: data.itemName,
+        weight: data.weight,
+        quantity: data.quantity,
+        quantityPerPack: data.quantityPerPack,
+        rate: data.rate,
+        marketRate: data.marketRate,
+        dateTime: data.dateTime,
+        month,
+        year,
+      },
+    });
+
+    return NextResponse.json(serializeInvestment(investment), { status: 201 });
+  } catch (error) {
+    console.error("POST INVESTMENT ERROR:", error);
+    return NextResponse.json({ error: "Failed to create investment" }, { status: 500 });
   }
 }
