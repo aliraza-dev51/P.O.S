@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "../../../../lib/prisma";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
@@ -17,6 +19,11 @@ const getMonthYear = (dateValue: string | Date) => {
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const id = Number(params.id);
     if (!Number.isInteger(id)) return NextResponse.json({ error: "Invalid credit ID." }, { status: 400 });
 
@@ -33,7 +40,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     if (!Number.isFinite(paidAmount) || paidAmount < 0) return NextResponse.json({ error: "Paid amount cannot be negative." }, { status: 400 });
     if (Number.isNaN(creditDate.getTime())) return NextResponse.json({ error: "Invalid credit date." }, { status: 400 });
 
-    const existing = await prisma.creditCustomer.findUnique({ where: { id } });
+    const existing = await prisma.creditCustomer.findFirst({ where: { id, userId: currentUser.id } });
     if (!existing) return NextResponse.json({ error: "Credit record not found." }, { status: 404 });
 
     // Overpayment is allowed - extra becomes advance
@@ -75,8 +82,16 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
 export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const id = Number(params.id);
     if (!Number.isInteger(id)) return NextResponse.json({ error: "Invalid credit ID." }, { status: 400 });
+
+    const existing = await prisma.creditCustomer.findFirst({ where: { id, userId: currentUser.id } });
+    if (!existing) return NextResponse.json({ error: "Credit record not found." }, { status: 404 });
 
     await prisma.creditCustomer.delete({ where: { id } });
     return NextResponse.json({ success: true });

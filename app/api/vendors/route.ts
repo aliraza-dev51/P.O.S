@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const toClient = (item: any) => ({
@@ -11,7 +13,13 @@ const toClient = (item: any) => ({
 
 export async function GET() {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const items = await prisma.vendorBill.findMany({
+      where: { userId: currentUser.id },
       orderBy: { dateTime: "desc" },
     });
     return NextResponse.json(items.map(toClient));
@@ -23,6 +31,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const vendorName = String(body.vendorName ?? "").trim();
     const billAmount = Number(body.billAmount);
@@ -33,7 +46,7 @@ export async function POST(request: Request) {
     }
 
     const item = await prisma.vendorBill.create({
-      data: { vendorName, billAmount, status },
+      data: { userId: currentUser.id, vendorName, billAmount, status },
     });
 
     return NextResponse.json(toClient(item), { status: 201 });

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "../../../lib/prisma";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
@@ -17,11 +19,19 @@ const getMonthYear = (dateValue: string | Date) => {
 
 export async function GET(request: Request) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const url = new URL(request.url);
     const type = url.searchParams.get("type") as "DAILY" | "MONTHLY" | null;
 
     const customers = await prisma.creditCustomer.findMany({
-      where: type ? { creditType: type } : undefined,
+      where: {
+        userId: currentUser.id,
+        ...(type ? { creditType: type } : {}),
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -50,6 +60,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     if (body?.action === "close-month") {
       const month = Number(body.month ?? new Date().getMonth() + 1);
       const year = Number(body.year ?? new Date().getFullYear());
@@ -65,6 +80,7 @@ export async function POST(request: Request) {
 
       await prisma.creditCustomer.updateMany({
         where: {
+          userId: currentUser.id,
           month,
           year,
           ...(creditType ? { creditType } : {}),
@@ -96,6 +112,7 @@ export async function POST(request: Request) {
     if (creditType === "MONTHLY") {
       existing = await prisma.creditCustomer.findFirst({
         where: {
+          userId: currentUser.id,
           personName: { equals: personName, mode: "insensitive" },
           creditType,
           month,
@@ -107,6 +124,7 @@ export async function POST(request: Request) {
     } else {
       existing = await prisma.creditCustomer.findFirst({
         where: {
+          userId: currentUser.id,
           personName: { equals: personName, mode: "insensitive" },
           creditType,
         },
@@ -160,6 +178,7 @@ export async function POST(request: Request) {
     // NEW CUSTOMER: Create with previousBalance = 0
     const customer = await prisma.creditCustomer.create({
       data: {
+        userId: currentUser.id,
         personName,
         creditType,
         creditDate,

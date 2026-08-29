@@ -17,7 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 
-import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import BrandLogo from "@/components/BrandLogo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -90,19 +90,13 @@ export default function LoginPage() {
             <Box sx={{ textAlign: "center" }}>
               <Box
                 sx={{
-                  width: 56,
-                  height: 56,
-                  mx: "auto",
-                  mb: 2,
-                  borderRadius: 3,
-                  bgcolor: "primary.main",
-                  color: "white",
+                  width: "100%",
                   display: "flex",
-                  alignItems: "center",
                   justifyContent: "center",
+                  mb: 3,
                 }}
               >
-                <LockOutlinedIcon />
+                <BrandLogo height={56} />
               </Box>
 
               <Typography

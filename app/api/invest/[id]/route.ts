@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function getMonthYearFromDate(dateValue?: string | Date) {
@@ -55,6 +57,11 @@ function validateInvestment(body: unknown) {
 
 export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await context.params;
     const investmentId = Number(id);
 
@@ -63,7 +70,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     }
 
     const body = await request.json();
-    const existing = await prisma.investment.findUnique({ where: { id: investmentId } });
+    const existing = await prisma.investment.findFirst({ where: { id: investmentId, userId: currentUser.id } });
 
     if (!existing) {
       return NextResponse.json({ message: "Investment not found" }, { status: 404 });
@@ -81,7 +88,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     const { month, year } = getMonthYearFromDate(data.dateTime);
 
     const closedThisMonth = await prisma.investment.findFirst({
-      where: { month, year, isClosed: true },
+      where: { userId: currentUser.id, month, year, isClosed: true },
     });
 
     if (closedThisMonth) {
@@ -125,6 +132,11 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await context.params;
     const investmentId = Number(id);
 
@@ -132,7 +144,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
       return NextResponse.json({ message: "Invalid investment ID" }, { status: 400 });
     }
 
-    const existing = await prisma.investment.findUnique({ where: { id: investmentId } });
+    const existing = await prisma.investment.findFirst({ where: { id: investmentId, userId: currentUser.id } });
     if (!existing) {
       return NextResponse.json({ message: "Investment not found" }, { status: 404 });
     }

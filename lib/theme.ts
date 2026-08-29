@@ -88,6 +88,42 @@ const theme = createTheme({
   shape: {
     borderRadius: 10,
   },
+
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 10,
+          textTransform: "none",
+          fontWeight: 600,
+          boxShadow: "none",
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          borderRadius: 12,
+          border: "1px solid",
+          borderColor: grey[200],
+        },
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: {
+          fontWeight: 600,
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        head: {
+          fontWeight: 600,
+        },
+      },
+    },
+  },
 });
 
 export default theme;

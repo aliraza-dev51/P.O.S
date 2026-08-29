@@ -9,6 +9,7 @@ datasource db {
 
 model Employee {
   id          Int          @id @default(autoincrement())
+  userId      Int
   name        String
   phone       String?
   cnic        String?
@@ -18,8 +19,10 @@ model Employee {
   image       String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   attendance  Attendance[]
 
+  @@index([userId])
   @@map("employees")
 }
 
@@ -32,6 +35,7 @@ model Customer {
 
 model Attendance {
   id         Int              @id @default(autoincrement())
+  userId     Int
   employeeId Int
   date       DateTime
   inTime     String?
@@ -39,16 +43,18 @@ model Attendance {
   status     AttendanceStatus
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   employee   Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
-  @@unique([employeeId, date])
-  @@index([employeeId])
-  @@index([date])
+  @@unique([userId, employeeId, date])
+  @@index([userId, employeeId])
+  @@index([userId, date])
   @@map("attendance")
 }
 
 model GroceryItem {
   id             Int       @id @default(autoincrement())
+  userId         Int
   itemName       String
   weight         Decimal   @db.Decimal(12, 3)
   quantity       Int
@@ -61,15 +67,17 @@ model GroceryItem {
   closedAt       DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([itemName, month, year])
-  @@index([month, year])
-  @@index([isClosed])
+  @@unique([userId, itemName, month, year])
+  @@index([userId, month, year])
+  @@index([userId, isClosed])
   @@map("grocery_items")
 }
 
 model SalesMonth {
   id             Int       @id @default(autoincrement())
+  userId         Int
   month          Int
   year           Int
   openingBalance Decimal   @db.Decimal(12, 2)
@@ -78,15 +86,17 @@ model SalesMonth {
   closedAt       DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   sales          Sale[]
 
-  @@unique([year, month])
-  @@index([year, month])
+  @@unique([userId, year, month])
+  @@index([userId, year, month])
   @@map("sales_months")
 }
 
 model Sale {
   id            Int            @id @default(autoincrement())
+  userId        Int
   salesMonthId  Int
   date          DateTime
   openingAmount Decimal        @db.Decimal(12, 2)
@@ -98,10 +108,11 @@ model Sale {
   onlineAccount OnlineAccount?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   salesMonth    SalesMonth     @relation(fields: [salesMonthId], references: [id], onDelete: Cascade)
 
-  @@index([date])
-  @@index([salesMonthId])
+  @@index([userId, date])
+  @@index([userId, salesMonthId])
   @@map("sales")
 }
 
@@ -112,6 +123,7 @@ enum CreditType {
 
 model CreditCustomer {
   id              Int        @id @default(autoincrement())
+  userId          Int
   personName      String
   creditType      CreditType @default(DAILY)
   creditDate      DateTime   @default(now())
@@ -124,29 +136,33 @@ model CreditCustomer {
   paidAmount      Decimal    @default(0) @db.Decimal(12, 2)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([personName])
-  @@index([creditType])
-  @@index([year, month])
+  @@index([userId, personName])
+  @@index([userId, creditType])
+  @@index([userId, year, month])
   @@map("credit_customers")
 }
 
 model VendorBill {
   id         Int          @id @default(autoincrement())
+  userId     Int
   dateTime   DateTime     @default(now())
   vendorName String
   billAmount Decimal      @db.Decimal(12, 2)
   status     VendorStatus @default(UNPAID)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([dateTime])
-  @@index([status])
+  @@index([userId, dateTime])
+  @@index([userId, status])
   @@map("vendor_bills")
 }
 
 model Investment {
   id              Int       @id @default(autoincrement())
+  userId          Int
   dateTime        DateTime  @default(now())
   itemName        String
   weight          Decimal   @db.Decimal(12, 3)
@@ -160,10 +176,11 @@ model Investment {
   closedAt        DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([dateTime])
-  @@index([year, month])
-  @@index([isClosed])
+  @@index([userId, dateTime])
+  @@index([userId, year, month])
+  @@index([userId, isClosed])
   @@map("investments")
 }
 
@@ -187,18 +204,26 @@ model Settings {
 }
 
 model User {
-  id            Int       @id @default(autoincrement())
-  name          String
-  email         String    @unique
-  password      String
-  role          UserRole  @default(STAFF)
-  phone         String?
-  image         String?
-  emailVerified DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  accounts      Account[]
-  sessions      Session[]
+  id             Int             @id @default(autoincrement())
+  name           String
+  email          String          @unique
+  password       String
+  role           UserRole        @default(STAFF)
+  phone          String?
+  image          String?
+  emailVerified  DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  accounts       Account[]
+  sessions       Session[]
+  employees      Employee[]
+  attendances    Attendance[]
+  groceryItems   GroceryItem[]
+  salesMonths    SalesMonth[]
+  sales          Sale[]
+  creditCustomers CreditCustomer[]
+  vendorBills    VendorBill[]
+  investments    Investment[]
 
   @@map("users")
 }

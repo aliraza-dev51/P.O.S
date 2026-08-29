@@ -13,6 +13,8 @@ import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import Tooltip from "@mui/material/Tooltip";
 
+import BrandLogo from "@/components/BrandLogo";
+
 import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
@@ -211,6 +213,22 @@ function SidebarContent({
         py: 1,
       }}
     >
+      {/* Logo */}
+
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          py: 1.5,
+          px: 1,
+        }}
+      >
+        <BrandLogo height={48} variant="mark-only" />
+      </Box>
+
+      <Divider sx={{ mb: 1 }} />
+
       {/* User */}
 
       <List disablePadding>

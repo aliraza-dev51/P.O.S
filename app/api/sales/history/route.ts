@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function monthName(month: number): string {
@@ -22,7 +24,13 @@ function monthName(month: number): string {
 
 export async function GET() {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const months = await prisma.salesMonth.findMany({
+      where: { userId: currentUser.id },
       orderBy: [
         {
           year: "desc",

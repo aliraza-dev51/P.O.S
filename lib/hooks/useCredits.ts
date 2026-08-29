@@ -9,7 +9,7 @@ import {
   updateCredit,
   type CreditCustomer,
 } from "@/lib/api/credits";
-import { creditKeys } from "@/lib/query-keys";
+import { creditKeys, dashboardKeys } from "@/lib/query-keys";
 
 export function useCredits(type: "DAILY" | "MONTHLY" = "DAILY") {
   return useQuery({
@@ -31,6 +31,7 @@ export function useCreateCredit(type: "DAILY" | "MONTHLY" = "DAILY") {
     }) => createCredit(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: creditKeys.list(type) });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }
@@ -58,6 +59,7 @@ export function useUpdateCredit(type: "DAILY" | "MONTHLY" = "DAILY") {
       );
       queryClient.invalidateQueries({ queryKey: creditKeys.list(type) });
       queryClient.invalidateQueries({ queryKey: creditKeys.detail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }
@@ -70,6 +72,7 @@ export function useDeleteCredit(type: "DAILY" | "MONTHLY" = "DAILY") {
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: creditKeys.list(type) });
       queryClient.invalidateQueries({ queryKey: creditKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }

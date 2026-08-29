@@ -1,21 +1,18 @@
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    // -------------------------------------------------
-    // Current user
-    // -------------------------------------------------
-    //
-    // Filhal hum Admin user fetch kar rahe hain.
-    // Auth.js session connect hone ke baad yahan
-    // session.user.id use hoga.
-    //
+    const currentUser = await getCurrentUser();
 
-    const user = await (prisma as typeof prisma & { user: typeof prisma extends { user: infer T } ? T : any }).user.findFirst({
-      orderBy: {
-        id: "asc",
-      },
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: currentUser.id },
       select: {
         id: true,
         name: true,
@@ -29,14 +26,7 @@ export async function GET() {
     });
 
     if (!user) {
-      return NextResponse.json(
-        {
-          error: "User not found",
-        },
-        {
-          status: 404,
-        }
-      );
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -52,13 +42,6 @@ export async function GET() {
   } catch (error) {
     console.error("GET USER ERROR:", error);
 
-    return NextResponse.json(
-      {
-        error: "Failed to load user",
-      },
-      {
-        status: 500,
-      }
-    );
+    return NextResponse.json({ error: "Failed to load user" }, { status: 500 });
   }
 }

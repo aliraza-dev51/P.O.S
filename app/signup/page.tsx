@@ -16,7 +16,8 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
+
+import BrandLogo from "@/components/BrandLogo";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -100,19 +101,13 @@ export default function SignupPage() {
             <Box sx={{ textAlign: "center" }}>
               <Box
                 sx={{
-                  width: 56,
-                  height: 56,
-                  mx: "auto",
-                  mb: 2,
-                  borderRadius: 3,
-                  bgcolor: "primary.main",
-                  color: "white",
+                  width: "100%",
                   display: "flex",
-                  alignItems: "center",
                   justifyContent: "center",
+                  mb: 3,
                 }}
               >
-                <PersonAddAltOutlinedIcon />
+                <BrandLogo height={56} />
               </Box>
               <Typography variant="h5" sx={{ fontWeight: 700 }}>
                 Create your account

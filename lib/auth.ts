@@ -1,8 +1,38 @@
-import NextAuth, { type NextAuthOptions } from "next-auth";
+import NextAuth, { type NextAuthOptions, getServerSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
+
+export async function getCurrentUser() {
+  const session = await getServerSession(authOptions);
+
+  const userId = Number(session?.user?.id);
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return null;
+  }
+
+  return prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      phone: true,
+      image: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}
+
+export async function requireCurrentUser() {
+  return getCurrentUser();
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -69,8 +99,8 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
-        token.role = user.role;
+        token.id = String(user.id);
+        token.role = String(user.role);
       }
 
       return token;
@@ -78,8 +108,8 @@ export const authOptions: NextAuthOptions = {
 
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as string;
+        session.user.id = String(token.id || "");
+        session.user.role = String(token.role || "");
       }
 
       return session;

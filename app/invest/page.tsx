@@ -121,6 +121,25 @@ const formatDateTime = (dateString: string) => {
   });
 };
 
+const calculateRatePerUnit = (rate: number, quantityPerPack: number) => {
+  if (quantityPerPack <= 0) return 0;
+  return rate / quantityPerPack;
+};
+
+const calculateMarketRatePerUnit = (marketRate: number, quantityPerPack: number) => {
+  if (quantityPerPack <= 0) return 0;
+  return marketRate / quantityPerPack;
+};
+
+const calculateMarginPerUnit = (item: InvestItem) => {
+  return (
+    calculateMarketRatePerUnit(item.marketRate, item.quantityPerPack) -
+    calculateRatePerUnit(item.rate, item.quantityPerPack)
+  );
+};
+
+const calculateProfit = (item: InvestItem) => calculateMarginPerUnit(item) * item.quantity;
+
 const getMonthLabel = (month: number, year: number) => `${MONTH_NAMES[month - 1] ?? "Month"} ${year}`;
 
 export default function InvestPage() {
@@ -189,25 +208,6 @@ export default function InvestPage() {
     loadMonthData();
     loadHistory();
   }, [loadMonthData, loadHistory]);
-
-  const calculateRatePerUnit = (rate: number, quantityPerPack: number) => {
-    if (quantityPerPack <= 0) return 0;
-    return rate / quantityPerPack;
-  };
-
-  const calculateMarketRatePerUnit = (marketRate: number, quantityPerPack: number) => {
-    if (quantityPerPack <= 0) return 0;
-    return marketRate / quantityPerPack;
-  };
-
-  const calculateMarginPerUnit = (item: InvestItem) => {
-    return (
-      calculateMarketRatePerUnit(item.marketRate, item.quantityPerPack) -
-      calculateRatePerUnit(item.rate, item.quantityPerPack)
-    );
-  };
-
-  const calculateProfit = useCallback((item: InvestItem) => calculateMarginPerUnit(item) * item.quantity, []);
 
   const summary = useMemo(() => {
     let totalQuantity = 0;

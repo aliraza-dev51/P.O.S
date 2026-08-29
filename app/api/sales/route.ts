@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 /* =========================================================
@@ -55,7 +57,8 @@ function nextDay(date: Date) {
 
 async function getVendorExpense(
   year: number,
-  month: number
+  month: number,
+  userId: number
 ) {
   const start = monthStart(year, month);
 
@@ -73,6 +76,7 @@ async function getVendorExpense(
       },
 
       where: {
+        userId,
         dateTime: {
           gte: start,
           lt: end,
@@ -90,7 +94,8 @@ async function getVendorExpense(
 ========================================================= */
 
 async function getVendorExpenseForDate(
-  date: Date
+  date: Date,
+  userId: number
 ) {
   const start = dayStart(date);
   const end = nextDay(date);
@@ -102,6 +107,7 @@ async function getVendorExpenseForDate(
       },
 
       where: {
+        userId,
         dateTime: {
           gte: start,
           lt: end,
@@ -119,12 +125,14 @@ async function getVendorExpenseForDate(
 ========================================================= */
 
 async function calculateMonthClosing(
-  salesMonthId: number
+  salesMonthId: number,
+  userId: number
 ) {
   const salesMonth =
-    await prisma.salesMonth.findUnique({
+    await prisma.salesMonth.findFirst({
       where: {
         id: salesMonthId,
+        userId,
       },
     });
 
@@ -141,6 +149,7 @@ async function calculateMonthClosing(
       },
 
       where: {
+        userId,
         salesMonthId,
       },
     });
@@ -148,7 +157,8 @@ async function calculateMonthClosing(
   const vendorExpense =
     await getVendorExpense(
       salesMonth.year,
-      salesMonth.month
+      salesMonth.month,
+      userId
     );
 
   const opening =
@@ -178,10 +188,11 @@ async function calculateMonthClosing(
    GET OR CREATE ACTIVE MONTH
 ========================================================= */
 
-async function getOrCreateActiveMonth() {
+async function getOrCreateActiveMonth(userId: number) {
   const existing =
     await prisma.salesMonth.findFirst({
       where: {
+        userId,
         isClosed: false,
       },
 
@@ -216,7 +227,8 @@ async function getOrCreateActiveMonth() {
   const previousRecord =
     await prisma.salesMonth.findUnique({
       where: {
-        year_month: {
+        userId_year_month: {
+          userId,
           year: previous.year,
           month: previous.month,
         },
@@ -225,7 +237,8 @@ async function getOrCreateActiveMonth() {
 
   return prisma.salesMonth.upsert({
     where: {
-      year_month: {
+      userId_year_month: {
+        userId,
         year,
         month,
       },
@@ -234,6 +247,7 @@ async function getOrCreateActiveMonth() {
     update: {},
 
     create: {
+      userId,
       year,
       month,
 
@@ -296,12 +310,18 @@ function normalizeOnlineAccount(
 
 export async function GET() {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const activeMonth =
-      await getOrCreateActiveMonth();
+      await getOrCreateActiveMonth(currentUser.id);
 
     const sales =
       await prisma.sale.findMany({
         where: {
+          userId: currentUser.id,
           salesMonthId:
             activeMonth.id,
         },
@@ -334,7 +354,8 @@ export async function GET() {
 
           const dateExpense =
             await getVendorExpenseForDate(
-              saleDate
+              saleDate,
+              currentUser.id
             );
 
           return {
@@ -397,7 +418,8 @@ export async function GET() {
     const vendorExpense =
       await getVendorExpense(
         activeMonth.year,
-        activeMonth.month
+        activeMonth.month,
+        currentUser.id
       );
 
     const totalSales =
@@ -419,6 +441,7 @@ export async function GET() {
 
     const history =
       await prisma.salesMonth.findMany({
+        where: { userId: currentUser.id },
         orderBy: [
           {
             year: "desc",
@@ -551,12 +574,17 @@ export async function POST(
        CLOSE MONTH
     ===================================================== */
 
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     if (
       body.action ===
       "close-month"
     ) {
       const activeMonth =
-        await getOrCreateActiveMonth();
+        await getOrCreateActiveMonth(currentUser.id);
 
       if (
         activeMonth.isClosed
@@ -574,7 +602,8 @@ export async function POST(
 
       const result =
         await calculateMonthClosing(
-          activeMonth.id
+          activeMonth.id,
+          currentUser.id
         );
 
       const closedMonth =
@@ -603,7 +632,8 @@ export async function POST(
       const newMonth =
         await prisma.salesMonth.upsert({
           where: {
-            year_month: {
+            userId_year_month: {
+              userId: currentUser.id,
               year: next.year,
               month: next.month,
             },
@@ -620,6 +650,7 @@ export async function POST(
           },
 
           create: {
+            userId: currentUser.id,
             year: next.year,
             month: next.month,
 
@@ -832,7 +863,7 @@ export async function POST(
     }
 
     const activeMonth =
-      await getOrCreateActiveMonth();
+      await getOrCreateActiveMonth(currentUser.id);
 
     if (
       activeMonth.isClosed
@@ -855,6 +886,7 @@ export async function POST(
     const existingSales =
       await prisma.sale.count({
         where: {
+          userId: currentUser.id,
           salesMonthId:
             activeMonth.id,
         },
@@ -887,12 +919,14 @@ export async function POST(
      */
     const dateExpense =
       await getVendorExpenseForDate(
-        saleDate
+        saleDate,
+        currentUser.id
       );
 
     const sale =
       await prisma.sale.create({
         data: {
+          userId: currentUser.id,
           salesMonthId:
             activeMonth.id,
 
@@ -935,7 +969,8 @@ export async function POST(
      */
     const closing =
       await calculateMonthClosing(
-        activeMonth.id
+        activeMonth.id,
+        currentUser.id
       );
 
     await prisma.salesMonth.update({

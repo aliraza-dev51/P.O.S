@@ -12,7 +12,7 @@ import {
   type Sale,
   type SalesMonth,
 } from "@/lib/api/sales";
-import { salesKeys } from "@/lib/query-keys";
+import { dashboardKeys, salesKeys } from "@/lib/query-keys";
 
 export function useSales(month?: number, year?: number) {
   return useQuery({
@@ -35,6 +35,7 @@ export function useCreateSale() {
     }) => createSale(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: salesKeys.all });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }
@@ -78,6 +79,7 @@ export function useUpdateSale() {
       });
       queryClient.invalidateQueries({ queryKey: salesKeys.all });
       queryClient.invalidateQueries({ queryKey: salesKeys.detail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }
@@ -90,6 +92,7 @@ export function useDeleteSale() {
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: salesKeys.all });
       queryClient.invalidateQueries({ queryKey: salesKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }
@@ -101,6 +104,7 @@ export function useCloseSalesMonth() {
     mutationFn: (id: number) => closeSalesMonth(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: salesKeys.all });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }

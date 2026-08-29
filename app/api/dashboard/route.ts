@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function getStartOfDay(date: Date) {
@@ -19,7 +21,14 @@ function formatMoney(value: number) {
 
 export async function GET() {
   try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const now = new Date();
+    const userId = currentUser.id;
 
     const todayStart = getStartOfDay(now);
     const todayEnd = getEndOfDay(now);
@@ -37,6 +46,7 @@ export async function GET() {
 
     const todaySales = await prisma.sale.findMany({
       where: {
+        userId,
         date: {
           gte: todayStart,
           lte: todayEnd,
@@ -60,6 +70,7 @@ export async function GET() {
 
     const todayVendorBills = await prisma.vendorBill.findMany({
       where: {
+        userId,
         dateTime: {
           gte: todayStart,
           lte: todayEnd,
@@ -81,6 +92,7 @@ export async function GET() {
 
     const dailyCreditCustomers = await prisma.creditCustomer.findMany({
       where: {
+        userId,
         creditType: "DAILY",
       },
     });
@@ -102,7 +114,7 @@ export async function GET() {
     // Expense = Paid + Unpaid
     // ==========================================
 
-    const allVendorBills = await prisma.vendorBill.findMany();
+    const allVendorBills = await prisma.vendorBill.findMany({ where: { userId } });
 
     const totalExpense = allVendorBills.reduce(
       (total, bill) => total + Number(bill.billAmount),
@@ -127,6 +139,7 @@ export async function GET() {
     // ==========================================
 
     const investments = await prisma.investment.findMany({
+      where: { userId },
       orderBy: {
         dateTime: "desc",
       },
@@ -178,6 +191,7 @@ export async function GET() {
 
     const weeklySales = await prisma.sale.findMany({
       where: {
+        userId,
         date: {
           gte: sevenDaysAgo,
           lte: todayEnd,
@@ -194,6 +208,7 @@ export async function GET() {
 
     const weeklyVendorBills = await prisma.vendorBill.findMany({
       where: {
+        userId,
         dateTime: {
           gte: sevenDaysAgo,
           lte: todayEnd,
@@ -210,6 +225,7 @@ export async function GET() {
 
     const weeklyInvestments = await prisma.investment.findMany({
       where: {
+        userId,
         dateTime: {
           gte: sevenDaysAgo,
           lte: todayEnd,

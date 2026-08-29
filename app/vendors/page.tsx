@@ -458,7 +458,7 @@ export default function VendorsPage() {
                 variant="body2"
                 color="text.secondary"
               >
-                Total Expense
+                Total Vendor Expense
               </Typography>
 
               <Typography

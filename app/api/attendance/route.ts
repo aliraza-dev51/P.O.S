@@ -1,5 +1,7 @@
-import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 const toDbStatus = (status: string) => {
   const map: Record<string, string> = {
@@ -31,7 +33,15 @@ const serialize = (record: any) => ({
 
 export async function GET() {
   try {
-    const records = await prisma.attendance.findMany({ orderBy: [{ date: "desc" }, { id: "desc" }] });
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const records = await prisma.attendance.findMany({
+      where: { userId: currentUser.id },
+      orderBy: [{ date: "desc" }, { id: "desc" }],
+    });
     return NextResponse.json(records.map(serialize));
   } catch (error) {
     console.error("GET /api/attendance", error);
@@ -41,12 +51,28 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const employeeId = Number(body.employeeId);
     const date = new Date(`${body.date}T00:00:00.000Z`);
+
+    const employee = await prisma.employee.findFirst({
+      where: { id: employeeId, userId: currentUser.id },
+      select: { id: true },
+    });
+
+    if (!employee) {
+      return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+    }
+
     const record = await prisma.attendance.upsert({
-      where: { employeeId_date: { employeeId, date } },
+      where: { userId_employeeId_date: { userId: currentUser.id, employeeId, date } },
       create: {
+        userId: currentUser.id,
         employeeId,
         date,
         inTime: body.inTime || null,

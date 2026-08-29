@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 /* =========================================================
@@ -43,7 +45,8 @@ function nextDay(date: Date) {
 }
 
 async function getVendorExpenseForDate(
-  date: Date
+  date: Date,
+  userId: number
 ) {
   const start = dayStart(date);
   const end = nextDay(date);
@@ -55,6 +58,7 @@ async function getVendorExpenseForDate(
       },
 
       where: {
+        userId,
         dateTime: {
           gte: start,
           lt: end,
@@ -105,12 +109,14 @@ function normalizeAmount(
 ========================================================= */
 
 async function recalculateMonth(
-  salesMonthId: number
+  salesMonthId: number,
+  userId: number
 ) {
   const month =
-    await prisma.salesMonth.findUnique({
+    await prisma.salesMonth.findFirst({
       where: {
         id: salesMonthId,
+        userId,
       },
     });
 
@@ -123,6 +129,7 @@ async function recalculateMonth(
   const sales =
     await prisma.sale.findMany({
       where: {
+        userId,
         salesMonthId,
       },
     });
@@ -175,6 +182,7 @@ async function recalculateMonth(
       },
 
       where: {
+        userId,
         dateTime: {
           gte: start,
           lt: end,
@@ -218,6 +226,11 @@ export async function GET(
   }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const {
       id: idParam,
     } = await context.params;
@@ -238,9 +251,10 @@ export async function GET(
     }
 
     const sale =
-      await prisma.sale.findUnique({
+      await prisma.sale.findFirst({
         where: {
           id,
+          userId: currentUser.id,
         },
 
         include: {
@@ -262,7 +276,8 @@ export async function GET(
 
     const expense =
       await getVendorExpenseForDate(
-        new Date(sale.date)
+        new Date(sale.date),
+        currentUser.id
       );
 
     return NextResponse.json({
@@ -375,6 +390,11 @@ export async function PUT(
   }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const {
       id: idParam,
     } = await context.params;
@@ -597,7 +617,8 @@ export async function PUT(
      */
     const dateExpense =
       await getVendorExpenseForDate(
-        saleDate
+        saleDate,
+        currentUser.id
       );
 
     const updatedSale =
@@ -642,7 +663,8 @@ export async function PUT(
     const closing =
       await recalculateMonth(
         existingSale
-          .salesMonthId
+          .salesMonthId,
+        currentUser.id
       );
 
     await prisma.salesMonth.update({
@@ -746,6 +768,11 @@ export async function DELETE(
   }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const {
       id: idParam,
     } = await context.params;
@@ -766,9 +793,10 @@ export async function DELETE(
     }
 
     const existingSale =
-      await prisma.sale.findUnique({
+      await prisma.sale.findFirst({
         where: {
           id,
+          userId: currentUser.id,
         },
 
         include: {
@@ -818,7 +846,8 @@ export async function DELETE(
     const closing =
       await recalculateMonth(
         existingSale
-          .salesMonthId
+          .salesMonthId,
+        currentUser.id
       );
 
     await prisma.salesMonth.update({

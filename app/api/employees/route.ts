@@ -1,9 +1,19 @@
-import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const employees = await prisma.employee.findMany({ orderBy: { id: "asc" } });
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const employees = await prisma.employee.findMany({
+      where: { userId: currentUser.id },
+      orderBy: { id: "asc" },
+    });
     return NextResponse.json(employees);
   } catch (error) {
     console.error("GET /api/employees", error);
@@ -13,9 +23,15 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const employee = await prisma.employee.create({
       data: {
+        userId: currentUser.id,
         name: String(body.name).trim(),
         phone: body.phone ? String(body.phone).trim() : null,
         cnic: body.cnic ? String(body.cnic).trim() : null,

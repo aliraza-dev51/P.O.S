@@ -10,7 +10,7 @@ import {
   type VendorItem,
   type VendorStatus,
 } from "@/lib/api/vendors";
-import { vendorKeys } from "@/lib/query-keys";
+import { dashboardKeys, vendorKeys } from "@/lib/query-keys";
 
 export function useVendors() {
   return useQuery({
@@ -30,6 +30,7 @@ export function useCreateVendor() {
     }) => createVendor(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: vendorKeys.list() });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }
@@ -55,6 +56,7 @@ export function useUpdateVendor() {
       );
       queryClient.invalidateQueries({ queryKey: vendorKeys.list() });
       queryClient.invalidateQueries({ queryKey: vendorKeys.detail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }
@@ -67,6 +69,7 @@ export function useDeleteVendor() {
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: vendorKeys.list() });
       queryClient.invalidateQueries({ queryKey: vendorKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }

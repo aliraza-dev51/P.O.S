@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const toClient = (item: any) => ({
@@ -14,9 +16,19 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const id = Number(params.id);
     if (!Number.isInteger(id)) {
       return NextResponse.json({ error: "Invalid vendor bill id" }, { status: 400 });
+    }
+
+    const existing = await prisma.vendorBill.findFirst({ where: { id, userId: currentUser.id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Vendor bill not found" }, { status: 404 });
     }
 
     const body = await request.json();
@@ -45,9 +57,19 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const id = Number(params.id);
     if (!Number.isInteger(id)) {
       return NextResponse.json({ error: "Invalid vendor bill id" }, { status: 400 });
+    }
+
+    const existing = await prisma.vendorBill.findFirst({ where: { id, userId: currentUser.id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Vendor bill not found" }, { status: 404 });
     }
 
     await prisma.vendorBill.delete({ where: { id } });

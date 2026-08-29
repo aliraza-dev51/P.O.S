@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
@@ -87,6 +89,12 @@ function validateInvestment(body: unknown) {
 
 export async function GET(request: Request) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userId = currentUser.id;
     const url = new URL(request.url);
     const closed = url.searchParams.get("closed");
     const month = url.searchParams.get("month");
@@ -96,14 +104,14 @@ export async function GET(request: Request) {
     if (closed === "true") {
       const closedMonths = await prisma.investment.groupBy({
         by: ["month", "year"],
-        where: { isClosed: true },
+        where: { userId, isClosed: true },
         orderBy: [{ year: "desc" }, { month: "desc" }],
       });
 
       const history = await Promise.all(
         closedMonths.map(async (monthYear) => {
           const items = await prisma.investment.findMany({
-            where: { month: monthYear.month, year: monthYear.year, isClosed: true },
+            where: { userId, month: monthYear.month, year: monthYear.year, isClosed: true },
             orderBy: { dateTime: "desc" },
           });
 
@@ -142,6 +150,7 @@ export async function GET(request: Request) {
     const targetYear = year ? Number(year) : currentYear;
 
     const whereClause: any = {
+      userId,
       month: targetMonth,
       year: targetYear,
       isClosed: false,
@@ -157,7 +166,7 @@ export async function GET(request: Request) {
     });
 
     const existingClosed = await prisma.investment.findFirst({
-      where: { month: targetMonth, year: targetYear, isClosed: true },
+      where: { userId, month: targetMonth, year: targetYear, isClosed: true },
     });
 
     let totalInvestment = 0;
@@ -189,6 +198,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: NextRequest) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userId = currentUser.id;
     const body = await request.json();
 
     if (body?.action === "close-month") {
@@ -204,7 +219,7 @@ export async function POST(request: NextRequest) {
       }
 
       const alreadyClosed = await prisma.investment.findFirst({
-        where: { month, year, isClosed: true },
+        where: { userId, month, year, isClosed: true },
       });
 
       if (alreadyClosed) {
@@ -212,7 +227,7 @@ export async function POST(request: NextRequest) {
       }
 
       await prisma.investment.updateMany({
-        where: { month, year, isClosed: false },
+        where: { userId, month, year, isClosed: false },
         data: { isClosed: true, closedAt: new Date() },
       });
 
@@ -226,7 +241,7 @@ export async function POST(request: NextRequest) {
 
     const { month, year } = getMonthYearFromDate(data.dateTime);
     const alreadyClosed = await prisma.investment.findFirst({
-      where: { month, year, isClosed: true },
+      where: { userId, month, year, isClosed: true },
     });
 
     if (alreadyClosed) {
@@ -235,6 +250,7 @@ export async function POST(request: NextRequest) {
 
     const investment = await prisma.investment.create({
       data: {
+        userId,
         itemName: data.itemName,
         weight: data.weight,
         quantity: data.quantity,

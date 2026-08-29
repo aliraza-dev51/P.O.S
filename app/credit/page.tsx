@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   Add,
@@ -20,6 +21,7 @@ import {
   useDeleteCredit,
   useUpdateCredit,
 } from "@/lib/hooks/useCredits";
+import { creditKeys, dashboardKeys } from "@/lib/query-keys";
 
 import {
   Box,
@@ -79,6 +81,7 @@ const emptyForm: CreditForm = {
 };
 
 export default function CreditPage() {
+  const queryClient = useQueryClient();
   const [selectedType, setSelectedType] = useState<CreditType>("DAILY");
 
   const { data: customers = [], isLoading: loading } = useCredits(selectedType);
@@ -155,7 +158,8 @@ export default function CreditPage() {
       }
 
       alert(`${creditType === "MONTHLY" ? "Monthly" : "Daily"} credit for ${getMonthLabel(month, year)} has been closed.`);
-      window.location.reload();
+      queryClient.invalidateQueries({ queryKey: creditKeys.list(creditType) });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     } catch (error) {
       console.error(error);
       alert(error instanceof Error ? error.message : "Unable to close credit month.");

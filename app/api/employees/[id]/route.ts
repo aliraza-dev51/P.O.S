@@ -1,9 +1,21 @@
-import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const id = Number(params.id);
+    const existing = await prisma.employee.findFirst({ where: { id, userId: currentUser.id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+    }
+
     const body = await request.json();
     const employee = await prisma.employee.update({
       where: { id },
@@ -26,7 +38,17 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
 export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const id = Number(params.id);
+    const existing = await prisma.employee.findFirst({ where: { id, userId: currentUser.id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+    }
+
     await prisma.employee.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // Utility functions
@@ -21,6 +23,12 @@ const getCurrentMonthYear = () => {
 // ============================================================
 export async function GET(request: Request) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userId = currentUser.id;
     const url = new URL(request.url);
     const month = url.searchParams.get("month");
     const year = url.searchParams.get("year");
@@ -31,7 +39,7 @@ export async function GET(request: Request) {
     if (closed === "true") {
       const closedMonths = await prisma.groceryItem.groupBy({
         by: ["month", "year"],
-        where: { isClosed: true },
+        where: { userId, isClosed: true },
         orderBy: [{ year: "desc" }, { month: "desc" }],
       });
 
@@ -39,6 +47,7 @@ export async function GET(request: Request) {
         closedMonths.map(async (monthYear) => {
           const items = await prisma.groceryItem.findMany({
             where: {
+              userId,
               month: monthYear.month,
               year: monthYear.year,
               isClosed: true,
@@ -97,9 +106,10 @@ export async function GET(request: Request) {
 
     // Fetch items for the month
     let whereClause: any = {
+      userId,
       month: targetMonth,
       year: targetYear,
-      isClosed: false, // Only get open records for current month
+      isClosed: false,
     };
 
     // Apply search filter if provided
@@ -129,6 +139,7 @@ export async function GET(request: Request) {
     // Check if this month exists as closed
     const existingClosed = await prisma.groceryItem.findFirst({
       where: {
+        userId,
         month: targetMonth,
         year: targetYear,
         isClosed: true,
@@ -182,6 +193,12 @@ export async function GET(request: Request) {
 // ============================================================
 export async function POST(request: Request) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userId = currentUser.id;
     const body = await request.json();
 
     // Handle close-month action
@@ -200,6 +217,7 @@ export async function POST(request: Request) {
       // Check if month is already closed
       const alreadyClosed = await prisma.groceryItem.findFirst({
         where: {
+          userId,
           month,
           year,
           isClosed: true,
@@ -213,6 +231,7 @@ export async function POST(request: Request) {
       // Close all items in this month
       await prisma.groceryItem.updateMany({
         where: {
+          userId,
           month,
           year,
           isClosed: false,
@@ -259,6 +278,7 @@ export async function POST(request: Request) {
     // Check if current month is closed
     const monthClosed = await prisma.groceryItem.findFirst({
       where: {
+        userId,
         month,
         year,
         isClosed: true,
@@ -275,6 +295,7 @@ export async function POST(request: Request) {
     // Create item for current month
     const item = await prisma.groceryItem.create({
       data: {
+        userId,
         itemName,
         weight,
         quantity,

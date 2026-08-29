@@ -143,15 +143,15 @@ export default function Dashboard() {
       icon: <ShoppingCart />,
     },
     {
-      title: "Today's Expense",
+      title: "Today's Expenses",
       value: money(data.stats.todayExpense),
-      subtitle: "Today's expenses",
+      subtitle: "Vendor bills today",
       icon: <ReceiptLong />,
     },
     {
       title: "Today's Credit",
       value: money(data.stats.todayCredit ?? data.stats.totalCredit ?? 0),
-      subtitle: `${data.stats.creditCustomers} daily customers`,
+      subtitle: "Daily outstanding",
       icon: <CreditCard />,
     },
     {

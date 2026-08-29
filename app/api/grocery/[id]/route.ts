@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
@@ -11,6 +13,11 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const id = Number(params.id);
     const body = await request.json();
     const itemName = String(body.itemName ?? "").trim();
@@ -38,8 +45,7 @@ export async function PUT(
       return NextResponse.json({ error: "Invalid grocery item data." }, { status: 400 });
     }
 
-    // Check if item exists
-    const existing = await prisma.groceryItem.findUnique({ where: { id } });
+    const existing = await prisma.groceryItem.findFirst({ where: { id, userId: currentUser.id } });
     if (!existing) {
       return NextResponse.json({ error: "Grocery item not found." }, { status: 404 });
     }
@@ -86,13 +92,17 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const id = Number(params.id);
     if (!Number.isInteger(id) || id <= 0) {
       return NextResponse.json({ error: "Invalid id." }, { status: 400 });
     }
 
-    // Check if item exists
-    const existing = await prisma.groceryItem.findUnique({ where: { id } });
+    const existing = await prisma.groceryItem.findFirst({ where: { id, userId: currentUser.id } });
     if (!existing) {
       return NextResponse.json({ error: "Grocery item not found." }, { status: 404 });
     }
