@@ -39,8 +39,8 @@ const theme = createTheme({
     },
 
     background: {
-      default: grey[100],
-      paper: "#ffffff",
+      default: "#fafafa",
+      paper: "#FaFaFa",
     },
 
     text: {
@@ -93,7 +93,7 @@ const theme = createTheme({
   },
 
   shape: {
-    borderRadius: 10,
+    borderRadius: 4,
   },
 
   components: {
@@ -104,6 +104,15 @@ const theme = createTheme({
           textTransform: "none",
           fontWeight: 600,
           boxShadow: "none",
+          minHeight: 40,
+          paddingInline: 16,
+          transition: "all 160ms ease",
+          "&:hover": {
+            boxShadow: "none",
+          },
+          "&.MuiButton-containedPrimary": {
+            boxShadow: "none",
+          },
         },
       },
       variants: [
@@ -125,6 +134,16 @@ const theme = createTheme({
           borderRadius: 12,
           border: "1px solid",
           borderColor: grey[200],
+          backgroundColor: "#F5F5F5",
+          boxShadow: "none",
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundColor: "#F5F5F5",
+          boxShadow: "none",
         },
       },
     },
@@ -132,13 +151,47 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           fontWeight: 600,
+          borderRadius: 8,
+        },
+      },
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 10,
+        },
+      },
+    },
+    MuiDialogTitle: {
+      styleOverrides: {
+        root: {
+          paddingBottom: 12,
+        },
+      },
+    },
+    MuiDialogActions: {
+      styleOverrides: {
+        root: {
+          padding: "12px 16px 16px",
+          gap: 8,
+        },
+      },
+    },
+    MuiTextField: {
+      styleOverrides: {
+        root: {
+          "& .MuiOutlinedInput-root": {
+            borderRadius: 10,
+          },
         },
       },
     },
     MuiTableCell: {
       styleOverrides: {
         head: {
-          fontWeight: 600,
+          fontWeight: 700,
+          color: grey[800],
+          backgroundColor: grey[50],
         },
       },
     },

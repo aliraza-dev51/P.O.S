@@ -1,10 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dayjs, { Dayjs } from "dayjs";
 
 import {
   Add,
   AccessTime,
+  ArrowBackIosNew,
+  ArrowForwardIos,
   CalendarMonth,
   CameraAlt,
   CheckCircle,
@@ -51,6 +54,10 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { DateCalendar } from "@mui/x-date-pickers/DateCalendar";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import Popover from "@mui/material/Popover";
 
 /* =========================================================
    TYPES
@@ -133,6 +140,12 @@ export default function EmployeesPage() {
 
   const [selectedEmployee, setSelectedEmployee] =
     useState<Employee | null>(null);
+
+  const [attendanceMonth, setAttendanceMonth] =
+    useState<Dayjs>(dayjs().startOf("month"));
+
+  const [attendanceCalendarAnchor, setAttendanceCalendarAnchor] =
+    useState<HTMLElement | null>(null);
 
   const [form, setForm] =
     useState<EmployeeForm>(emptyForm);
@@ -417,7 +430,21 @@ export default function EmployeesPage() {
     employee: Employee
   ) => {
     setSelectedEmployee(employee);
+    setAttendanceMonth(dayjs().startOf("month"));
     setAttendanceDialog(true);
+  };
+
+  const handleAttendanceMonthChange = (value: Dayjs | null) => {
+    if (!value) return;
+
+    const nextMonth = value.startOf("month");
+    setAttendanceMonth(nextMonth);
+    setAttendanceCalendarAnchor(null);
+  };
+
+  const moveAttendanceMonth = (amount: number) => {
+    const nextMonth = attendanceMonth.add(amount, "month").startOf("month");
+    setAttendanceMonth(nextMonth);
   };
 
   const closeAttendance = () => {
@@ -512,10 +539,8 @@ export default function EmployeesPage() {
       return [];
     }
 
-    const now = new Date();
-
-    const year = now.getFullYear();
-    const month = now.getMonth();
+    const year = attendanceMonth.year();
+    const month = attendanceMonth.month();
 
     const daysInMonth =
       new Date(
@@ -1757,6 +1782,122 @@ export default function EmployeesPage() {
           dividers
         >
           {/* SALARY SUMMARY */}
+
+          <Card
+            sx={{
+              mb: 3,
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 2,
+            }}
+          >
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={2}
+                sx={{
+                  justifyContent: "space-between",
+                  alignItems: { xs: "flex-start", sm: "center" },
+                }}
+              >
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    ATTENDANCE PERIOD
+                  </Typography>
+
+                  <LocalizationProvider dateAdapter={AdapterDayjs}>
+                    <Stack
+                      direction="row"
+                      sx={{
+                        mt: 1,
+                        width: { xs: "100%", sm: "fit-content" },
+                        minWidth: { sm: 330 },
+                        alignItems: "center",
+                        border: "1px solid",
+                        borderColor: "divider",
+                        borderRadius: 1,
+                        bgcolor: "background.paper",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <IconButton
+                        size="small"
+                        aria-label="Previous month"
+                        onClick={() => moveAttendanceMonth(-1)}
+                        disableRipple
+                        disableFocusRipple
+                        sx={{
+                          borderRadius: 0,
+                          px: 1.5,
+                          transition: "color 160ms ease",
+                          "&:hover": {
+                            bgcolor: "transparent",
+                            color: "primary.main",
+                          },
+                          "&:focus-visible": {
+                            bgcolor: "transparent",
+                          },
+                        }}
+                      >
+                        <ArrowBackIosNew fontSize="small" />
+                      </IconButton>
+
+                      <Button
+                        variant="text"
+                        onClick={(event) => setAttendanceCalendarAnchor(event.currentTarget)}
+                        startIcon={<CalendarMonth fontSize="small" />}
+                        sx={{
+                          flex: 1,
+                          minWidth: 0,
+                          px: 1.5,
+                          color: "text.primary",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {attendanceMonth.startOf("month").format("D MMM YYYY")} - {attendanceMonth.endOf("month").format("D MMM YYYY")}
+                      </Button>
+
+                      <IconButton
+                        size="small"
+                        aria-label="Next month"
+                        onClick={() => moveAttendanceMonth(1)}
+                        disableRipple
+                        disableFocusRipple
+                        sx={{
+                          borderRadius: 0,
+                          px: 1.5,
+                          transition: "color 160ms ease",
+                          "&:hover": {
+                            bgcolor: "transparent",
+                            color: "primary.main",
+                          },
+                          "&:focus-visible": {
+                            bgcolor: "transparent",
+                          },
+                        }}
+                      >
+                        <ArrowForwardIos fontSize="small" />
+                      </IconButton>
+                    </Stack>
+
+                    <Popover
+                      open={Boolean(attendanceCalendarAnchor)}
+                      anchorEl={attendanceCalendarAnchor}
+                      onClose={() => setAttendanceCalendarAnchor(null)}
+                      anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                    >
+                      <DateCalendar
+                        value={attendanceMonth}
+                        onChange={handleAttendanceMonthChange}
+                        maxDate={dayjs()}
+                        disableFuture
+                      />
+                    </Popover>
+                  </LocalizationProvider>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
 
           <Grid
             container

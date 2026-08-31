@@ -470,34 +470,53 @@ export default function InvestPage() {
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 } }}>
-      <Stack direction={{ xs: "column", sm: "row" }} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, gap: 2, mb: 4 }}>
+      <Stack direction={{ xs: "column", sm: "row" }} sx={{ justifyContent: "right", alignItems: { xs: "flex-start", sm: "center" }, gap: 2, mb: 4 }}>
         <Box>
           <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-            <TrendingUp color="primary" />
-            <Typography variant="h4" sx={{ fontWeight: 800 }}>Investments</Typography>
-          </Stack>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Manage stock investment, market value and expected profit.</Typography>
-        </Box>
-        <Button variant="contained" startIcon={<Add />} onClick={openAddModal} disabled={isClosed}>Add Investment</Button>
-      </Stack>
-
-      <Card sx={{ mb: 3, border: "1px solid", borderColor: isClosed ? "warning.main" : "primary.main", borderRadius: 3 }}>
-        <CardContent>
-          <Stack direction={{ xs: "column", md: "row" }} sx={{ justifyContent: "space-between", alignItems: { xs: "stretch", md: "center" }, gap: 2 }}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-              <IconButton onClick={goPreviousMonth} size="small"><ChevronLeft /></IconButton>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>{getMonthLabel(selectedMonth, selectedYear)}</Typography>
-              <IconButton onClick={goNextMonth} size="small"><ChevronRight /></IconButton>
-            </Stack>
-
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-              <Chip label={isClosed ? "CLOSED" : "OPEN"} color={isClosed ? "warning" : "success"} />
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ width: { xs: "100%", sm: "auto" }, alignItems: { xs: "stretch", sm: "center" } }}>
               {!isClosed && (
-                <Button variant="outlined" color="warning" onClick={handleCloseMonth} disabled={closingMonth || (items.length === 0)}>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  onClick={handleCloseMonth}
+                  disabled={closingMonth || items.length === 0}
+                  sx={{
+                    minWidth: { sm: 140 },
+                    bgcolor: "#F5F5F5",
+                    color: "text.primary",
+                    border: "1px solid",
+                    borderColor: "divider",
+                    "&:hover": {
+                      bgcolor: "#efefef",
+                    },
+                  }}
+                >
                   {closingMonth ? "Closing..." : "Close Month"}
                 </Button>
               )}
+              <Button variant="contained" startIcon={<Add />} onClick={openAddModal} disabled={isClosed} sx={{ minWidth: { sm: 150 } }}>
+                Add Investment
+              </Button>
             </Stack>
+            <Divider sx={{ my: 3 }} />
+          </Stack>
+        </Box>
+      </Stack>
+
+      <Card sx={{ mb: 3, border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
+        <CardContent>
+          <Stack direction={{ xs: "column", md: "row" }} sx={{ justifyContent: "space-between", alignItems: { xs: "stretch", md: "center" }, gap: 2 }}>
+            <Box>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <IconButton onClick={goPreviousMonth} size="small"><ChevronLeft /></IconButton>
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>{getMonthLabel(selectedMonth, selectedYear)}</Typography>
+                <IconButton onClick={goNextMonth} size="small"><ChevronRight /></IconButton>
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Status: <Box component="span" sx={{ fontWeight: 700, color: "text.primary" }}>{isClosed ? "CLOSED" : "OPEN"}</Box>
+              </Typography>
+            </Box>
+
           </Stack>
         </CardContent>
       </Card>

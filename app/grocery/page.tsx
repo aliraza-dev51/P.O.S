@@ -61,6 +61,7 @@ import Popover from "@mui/material/Popover";
 
 type GroceryForm = {
   itemName: string;
+  date: string;
   weight: string;
   quantity: string;
   rate: string;
@@ -70,6 +71,7 @@ type GroceryForm = {
 
 const emptyForm: GroceryForm = {
   itemName: "",
+  date: dayjs().format("YYYY-MM-DD"),
   weight: "",
   quantity: "",
   rate: "",
@@ -138,6 +140,13 @@ export default function GroceryPage() {
     return `Rs. ${value.toLocaleString("en-PK", { maximumFractionDigits: 2 })}`;
   };
 
+  const formatEntryDate = (value: string | null | undefined) => {
+    if (!value) return "-";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" });
+  };
+
   const showSnackbar = (message: string, severity: "success" | "error") => {
     setSnackbar({ open: true, message, severity });
   };
@@ -179,7 +188,10 @@ export default function GroceryPage() {
       return;
     }
     setEditingId(null);
-    setForm({ ...emptyForm });
+    setForm({
+      ...emptyForm,
+      date: selectedDateKey || dayjs().format("YYYY-MM-DD"),
+    });
     setOpenAddModal(true);
   };
 
@@ -191,6 +203,7 @@ export default function GroceryPage() {
     setEditingId(item.id);
     setForm({
       itemName: item.itemName,
+      date: item.entryDate ? item.entryDate.split("T")[0] : dayjs().format("YYYY-MM-DD"),
       weight: String(item.weight),
       quantity: String(item.quantity),
       rate: String(item.rate),
@@ -213,6 +226,7 @@ export default function GroceryPage() {
 
   const saveItem = async () => {
     const itemName = form.itemName.trim();
+    const entryDate = form.date || selectedDateKey || dayjs().format("YYYY-MM-DD");
     const weight = Number(form.weight);
     const quantity = Number(form.quantity);
     const rate = Number(form.rate);
@@ -221,6 +235,7 @@ export default function GroceryPage() {
 
     if (
       !itemName ||
+      !entryDate ||
       weight <= 0 ||
       quantity <= 0 ||
       rate < 0 ||
@@ -242,7 +257,7 @@ export default function GroceryPage() {
             rate,
             transportation,
             sellingPrice,
-            entryDate: selectedDateKey,
+            entryDate,
           },
         });
         showSnackbar("Item updated successfully.", "success");
@@ -254,7 +269,7 @@ export default function GroceryPage() {
           rate,
           transportation,
           sellingPrice,
-          entryDate: selectedDate?.format("YYYY-MM-DD"),
+          entryDate,
         });
         showSnackbar("Item added successfully.", "success");
       }
@@ -623,6 +638,7 @@ export default function GroceryPage() {
               <TableRow>
                 <TableCell><b>S.No</b></TableCell>
                 <TableCell><b>Item Name</b></TableCell>
+                <TableCell><b>Date</b></TableCell>
                 <TableCell align="right"><b>Weight KG</b></TableCell>
                 <TableCell align="right"><b>Qty</b></TableCell>
                 <TableCell align="right"><b>Rate</b></TableCell>
@@ -647,6 +663,7 @@ export default function GroceryPage() {
                   <TableRow key={item.id} hover>
                     <TableCell>{index + 1}</TableCell>
                     <TableCell><Typography sx={{ fontWeight: 600 }}>{item.itemName}</Typography></TableCell>
+                    <TableCell>{formatEntryDate(item.entryDate)}</TableCell>
                     <TableCell align="right">{item.weight}</TableCell>
                     <TableCell align="right">{item.quantity}</TableCell>
                     <TableCell align="right">{formatPrice(item.rate)}</TableCell>
@@ -665,7 +682,7 @@ export default function GroceryPage() {
                 );
               })}
               <TableRow>
-                <TableCell colSpan={10} align="right"><Typography sx={{ fontWeight: 700 }}>GRAND TOTAL</Typography></TableCell>
+                <TableCell colSpan={11} align="right"><Typography sx={{ fontWeight: 700 }}>GRAND TOTAL</Typography></TableCell>
                 <TableCell align="right"><Typography sx={{ fontWeight: 700 }}>{formatPrice(summary.totalSales)}</Typography></TableCell>
                 <TableCell align="right"><Typography sx={{ fontWeight: 700, color: summary.totalProfit >= 0 ? "success.main" : "error.main" }}>{formatPrice(summary.totalProfit)}</Typography></TableCell>
                 <TableCell />
@@ -714,6 +731,7 @@ export default function GroceryPage() {
         <DialogContent dividers>
           <Grid container spacing={2} sx={{ pt: 1 }}>
             <Grid size={12}><TextField fullWidth label="Item Name" value={form.itemName} onChange={(e) => handleChange("itemName", e.target.value)} /></Grid>
+            <Grid size={12}><TextField fullWidth label="Entry Date" type="date" value={form.date} onChange={(e) => handleChange("date", e.target.value)} slotProps={{ inputLabel: { shrink: true } }} /></Grid>
             <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="Weight (KG)" type="number" value={form.weight} onChange={(e) => handleChange("weight", e.target.value)} slotProps={{ htmlInput: { min: 0 } }} /></Grid>
             <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="Quantity" type="number" value={form.quantity} onChange={(e) => handleChange("quantity", e.target.value)} slotProps={{ htmlInput: { min: 0 } }} /></Grid>
             <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="Rate" type="number" value={form.rate} onChange={(e) => handleChange("rate", e.target.value)} slotProps={{ htmlInput: { min: 0 } }} /></Grid>

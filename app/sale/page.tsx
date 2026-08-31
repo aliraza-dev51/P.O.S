@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dayjs, { Dayjs } from "dayjs";
 
 import {
   useCloseSalesMonth,
@@ -51,6 +52,10 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { DateCalendar } from "@mui/x-date-pickers/DateCalendar";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import Popover from "@mui/material/Popover";
 
 /* =========================================================
    TYPES
@@ -255,6 +260,12 @@ export default function SellPage() {
   const [closeDialog, setCloseDialog] =
     useState<boolean>(false);
 
+  const [calendarAnchor, setCalendarAnchor] =
+    useState<HTMLElement | null>(null);
+
+  const [selectedDate, setSelectedDate] =
+    useState<Dayjs | null>(null);
+
   const [editingId, setEditingId] =
     useState<number | null>(null);
 
@@ -274,6 +285,12 @@ export default function SellPage() {
     if (activeMonth) {
       setSelectedMonth(activeMonth.month);
       setSelectedYear(activeMonth.year);
+      setSelectedDate(dayjs(new Date(activeMonth.year, activeMonth.month - 1, 1)));
+    } else {
+      const now = dayjs();
+      setSelectedDate(now.startOf("month"));
+      setSelectedMonth(now.month() + 1);
+      setSelectedYear(now.year());
     }
   }, [activeMonth]);
 
@@ -375,32 +392,41 @@ export default function SellPage() {
      MONTH NAVIGATION
   ======================================================= */
 
-  const goPreviousMonth = () => {
-    if (selectedMonth === 1) {
-      setSelectedMonth(12);
-      setSelectedYear(
-        selectedYear - 1
-      );
-      return;
-    }
+  const displayedMonth = selectedDate ?? dayjs();
+  const rangeStart = displayedMonth.startOf("month");
+  const rangeEnd = displayedMonth.endOf("month").isAfter(dayjs(), "day") ? dayjs() : displayedMonth.endOf("month");
+  const canGoNext = displayedMonth.startOf("month").isBefore(dayjs().startOf("month"), "month");
 
-    setSelectedMonth(
-      selectedMonth - 1
-    );
+  const goPreviousMonth = () => {
+    const nextMonth = displayedMonth.subtract(1, "month").startOf("month");
+    if (nextMonth.isAfter(dayjs().startOf("month"), "month")) return;
+
+    setSelectedDate(nextMonth);
+    setSelectedMonth(nextMonth.month() + 1);
+    setSelectedYear(nextMonth.year());
   };
 
   const goNextMonth = () => {
-    if (selectedMonth === 12) {
-      setSelectedMonth(1);
-      setSelectedYear(
-        selectedYear + 1
-      );
+    const nextMonth = displayedMonth.add(1, "month").startOf("month");
+    if (nextMonth.isAfter(dayjs().startOf("month"), "month")) return;
+
+    setSelectedDate(nextMonth);
+    setSelectedMonth(nextMonth.month() + 1);
+    setSelectedYear(nextMonth.year());
+  };
+
+  const handleMonthChange = (value: Dayjs | null) => {
+    if (!value) return;
+
+    const nextMonth = value.startOf("month");
+    if (nextMonth.isAfter(dayjs().startOf("month"), "month")) {
       return;
     }
 
-    setSelectedMonth(
-      selectedMonth + 1
-    );
+    setSelectedDate(nextMonth);
+    setSelectedMonth(nextMonth.month() + 1);
+    setSelectedYear(nextMonth.year());
+    setCalendarAnchor(null);
   };
 
   /* =======================================================
@@ -925,128 +951,169 @@ export default function SellPage() {
           MONTH BAR
       =================================================== */}
 
-      <Paper
-        elevation={0}
+      <Card
         sx={{
-          p: 2,
           mb: 3,
-          border:
-            "1px solid",
-          borderColor:
-            "divider",
-          borderRadius: 3,
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 2,
         }}
       >
-        <Stack
-          direction={{
-            xs: "column",
-            md: "row",
-          }}
-          sx={{
-            justifyContent:
-              "space-between",
-            alignItems: {
-              xs: "stretch",
-              md: "center",
-            },
-            gap: 2,
-          }}
-        >
+        <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
           <Stack
-            direction="row"
-            spacing={1}
+            direction={{ xs: "column", sm: "row" }}
+            spacing={2}
             sx={{
-              alignItems:
-                "center",
+              justifyContent: "space-between",
+              alignItems: { xs: "flex-start", sm: "center" },
             }}
           >
-            <IconButton
-              size="small"
-              onClick={
-                goPreviousMonth
-              }
-            >
-              <ArrowBackIosNew fontSize="small" />
-            </IconButton>
-
-            <CalendarMonth
-              color="primary"
-            />
-
             <Box>
-              <Typography
-                variant="h6"
-                sx={{
-                  fontWeight: 700,
-                  lineHeight: 1.2,
-                }}
-              >
-                {formatMonth(
-                  selectedMonth,
-                  selectedYear
-                )}
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                SALES PERIOD
               </Typography>
 
-              {isCurrentCalendarMonth && (
-                <Typography
-                  variant="caption"
-                  color="primary"
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                <Stack
+                  direction="row"
+                  sx={{
+                    mt: 1,
+                    width: { xs: "100%", sm: "fit-content" },
+                    minWidth: { sm: 330 },
+                    alignItems: "center",
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    bgcolor: "background.paper",
+                    overflow: "hidden",
+                  }}
                 >
-                  Current calendar month
-                </Typography>
-              )}
+                  <IconButton
+                    size="small"
+                    aria-label="Previous month"
+                    onClick={goPreviousMonth}
+                    disableRipple
+                    disableFocusRipple
+                    sx={{
+                      borderRadius: 0,
+                      px: 1.5,
+                      transition: "color 160ms ease",
+                      "&:hover": {
+                        bgcolor: "transparent",
+                        color: "primary.main",
+                      },
+                      "&:focus-visible": {
+                        bgcolor: "transparent",
+                      },
+                    }}
+                  >
+                    <ArrowBackIosNew fontSize="small" />
+                  </IconButton>
+
+                  <Button
+                    variant="text"
+                    onClick={(event) => setCalendarAnchor(event.currentTarget)}
+                    startIcon={<CalendarMonth fontSize="small" />}
+                    sx={{
+                      flex: 1,
+                      minWidth: 0,
+                      px: 1.5,
+                      color: "text.primary",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {rangeStart.format("D MMM YYYY")} - {rangeEnd.format("D MMM YYYY")}
+                  </Button>
+
+                  <IconButton
+                    size="small"
+                    aria-label="Next month"
+                    onClick={goNextMonth}
+                    disabled={!canGoNext}
+                    disableRipple
+                    disableFocusRipple
+                    sx={{
+                      borderRadius: 0,
+                      px: 1.5,
+                      transition: "color 160ms ease",
+                      "&:hover": {
+                        bgcolor: "transparent",
+                        color: "primary.main",
+                      },
+                      "&.Mui-disabled:hover": {
+                        bgcolor: "transparent",
+                        color: "action.disabled",
+                      },
+                      "&:focus-visible": {
+                        bgcolor: "transparent",
+                      },
+                    }}
+                  >
+                    <ArrowForwardIos fontSize="small" />
+                  </IconButton>
+                </Stack>
+
+                <Popover
+                  open={Boolean(calendarAnchor)}
+                  anchorEl={calendarAnchor}
+                  onClose={() => setCalendarAnchor(null)}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                >
+                  <DateCalendar
+                    value={selectedDate}
+                    onChange={handleMonthChange}
+                    maxDate={dayjs()}
+                    disableFuture
+                  />
+                </Popover>
+              </LocalizationProvider>
+
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Status: {isClosed ? (
+                  <Chip label="CLOSED" size="small" color="warning" />
+                ) : (
+                  <Chip label="OPEN" size="small" color="success" />
+                )}
+              </Typography>
             </Box>
 
-            <IconButton
-              size="small"
-              onClick={
-                goNextMonth
-              }
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1}
+              sx={{
+                width: { xs: "100%", sm: "auto" },
+                alignItems: { xs: "stretch", sm: "center" },
+              }}
             >
-              <ArrowForwardIos fontSize="small" />
-            </IconButton>
-          </Stack>
+              {!isClosed && (
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  onClick={() => setCloseDialog(true)}
+                  disabled={loading || !activeMonth}
+                  sx={{ minWidth: { sm: 130 } }}
+                >
+                  Close Month
+                </Button>
+              )}
 
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{
-              alignItems:
-                "center",
-              justifyContent:
-                "flex-end",
-            }}
-          >
-            <Chip
-              size="small"
-              icon={
-                isClosed ? (
-                  <Lock />
-                ) : (
-                  <CheckCircle />
-                )
-              }
-              label={
-                isClosed
-                  ? "CLOSED"
-                  : "OPEN"
-              }
-              color={
-                isClosed
-                  ? "default"
-                  : "success"
-              }
-            />
+              {isClosed && (
+                <Chip icon={<Lock />} label="This month is closed" color="warning" />
+              )}
 
-            <Chip
-              size="small"
-              label={`${sales.length} Records`}
-              variant="outlined"
-              color="primary"
-            />
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={openAddSale}
+                disabled={isClosed}
+                sx={{ minWidth: { sm: 130 } }}
+              >
+                Add Sale
+              </Button>
+            </Stack>
           </Stack>
-        </Stack>
-      </Paper>
+        </CardContent>
+      </Card>
 
       {/* ===================================================
           SUMMARY CARDS
