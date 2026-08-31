@@ -106,9 +106,10 @@ export default function GroceryPage() {
     setSelectedDate(dayjs(now));
   }, []);
 
-  const currentGroceryQuery = useGrocery(currentMonth, currentYear);
+  const selectedDateKey = selectedDate?.format("YYYY-MM-DD");
+  const currentGroceryQuery = useGrocery(currentMonth, currentYear, selectedDateKey);
   const historyQuery = useGroceryHistory();
-  const searchQuery_ = useGrocerySearch(searchQuery, currentMonth, currentYear);
+  const searchQuery_ = useGrocerySearch(searchQuery, currentMonth, currentYear, selectedDateKey);
   const viewMonthQuery = useGroceryMonth(viewingMonth?.month ?? 0, viewingMonth?.year ?? 0);
 
   const createMutation = useCreateGrocery();
@@ -234,7 +235,15 @@ export default function GroceryPage() {
       if (editingId !== null) {
         await updateMutation.mutateAsync({
           id: editingId,
-          payload: { itemName, weight, quantity, rate, transportation, sellingPrice },
+          payload: {
+            itemName,
+            weight,
+            quantity,
+            rate,
+            transportation,
+            sellingPrice,
+            entryDate: selectedDateKey,
+          },
         });
         showSnackbar("Item updated successfully.", "success");
       } else {
@@ -245,6 +254,7 @@ export default function GroceryPage() {
           rate,
           transportation,
           sellingPrice,
+          entryDate: selectedDate?.format("YYYY-MM-DD"),
         });
         showSnackbar("Item added successfully.", "success");
       }
@@ -439,19 +449,20 @@ export default function GroceryPage() {
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 } }}>
-      <Stack direction={{ xs: "column", sm: "row" }} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, gap: 2, mb: 4 }}>
-        <Box>
-          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-            <LocalGroceryStore color="success" />
-            <Typography variant="h4" sx={{ fontWeight: 700 }}>Grocery</Typography>
-          </Stack>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Manage grocery items, costs and profits</Typography>
-        </Box>
-        <Button variant="contained" startIcon={<Add />} onClick={openAddDialog} disabled={isClosed}>Add Item</Button>
-      </Stack>
+      
+       
+       
+     
 
-      <Card sx={{ mb: 4, border: "2px solid", borderColor: isClosed ? "warning.main" : "primary.main", borderRadius: 2 }}>
-        <CardContent>
+      <Card
+        sx={{
+          mb: 4,
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 2,
+        }}
+      >
+        <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, mb: 2 }}>
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 700 }}>GROCERY PERIOD</Typography>
@@ -474,7 +485,20 @@ export default function GroceryPage() {
                     size="small"
                     aria-label="Previous month"
                     onClick={() => moveMonth(-1)}
-                    sx={{ borderRadius: 0, px: 1.5 }}
+                    disableRipple
+                    disableFocusRipple
+                    sx={{
+                      borderRadius: 0,
+                      px: 1.5,
+                      transition: "color 160ms ease",
+                      "&:hover": {
+                        bgcolor: "transparent",
+                        color: "primary.main",
+                      },
+                      "&:focus-visible": {
+                        bgcolor: "transparent",
+                      },
+                    }}
                   >
                     <ArrowBackIosNew fontSize="small" />
                   </IconButton>
@@ -497,7 +521,24 @@ export default function GroceryPage() {
                     aria-label="Next month"
                     onClick={() => moveMonth(1)}
                     disabled={!canGoNext}
-                    sx={{ borderRadius: 0, px: 1.5 }}
+                    disableRipple
+                    disableFocusRipple
+                    sx={{
+                      borderRadius: 0,
+                      px: 1.5,
+                      transition: "color 160ms ease",
+                      "&:hover": {
+                        bgcolor: "transparent",
+                        color: "primary.main",
+                      },
+                      "&.Mui-disabled:hover": {
+                        bgcolor: "transparent",
+                        color: "action.disabled",
+                      },
+                      "&:focus-visible": {
+                        bgcolor: "transparent",
+                      },
+                    }}
                   >
                     <ArrowForwardIos fontSize="small" />
                   </IconButton>
@@ -521,20 +562,48 @@ export default function GroceryPage() {
               </LocalizationProvider>
               <Typography variant="body2" color="text.secondary">Status: {isClosed ? <Chip label="CLOSED" size="small" color="warning" /> : <Chip label="OPEN" size="small" color="success" />}</Typography>
             </Box>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-              {!isClosed && <Button variant="outlined" color="warning" onClick={handleCloseMonth} disabled={items.length === 0}>Close Month</Button>}
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1}
+              sx={{
+                width: { xs: "100%", sm: "auto" },
+                alignItems: { xs: "stretch", sm: "center" },
+              }}
+            >
+              {!isClosed && (
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  onClick={handleCloseMonth}
+                  disabled={items.length === 0}
+                  sx={{ minWidth: { sm: 130 } }}
+                >
+                  Close Month
+                </Button>
+              )}
               {isClosed && <Chip icon={<Lock />} label="This month is closed" color="warning" />}
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={openAddDialog}
+                disabled={isClosed}
+                sx={{ minWidth: { sm: 130 } }}
+              >
+                Add Item
+              </Button>
             </Stack>
           </Stack>
+
           <TextField fullWidth placeholder="Search by item name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} slotProps={{ input: { startAdornment: <Search sx={{ mr: 1, color: "text.secondary" }} />, endAdornment: searchQuery && <IconButton size="small" onClick={() => setSearchQuery("")}><Close fontSize="small" /></IconButton>, } }} sx={{ mt: 2 }} />
         </CardContent>
       </Card>
+                    
 
-      {currentMonthData && <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}><CardContent><Typography variant="body2" color="text.secondary">Total Items</Typography><Typography variant="h5" sx={{ mt: 1, fontWeight: 700 }}>{items.length}</Typography></CardContent></Card></Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}><CardContent><Typography variant="body2" color="text.secondary">Total Weight</Typography><Typography variant="h5" sx={{ mt: 1, fontWeight: 700 }}>{summary.totalWeight.toLocaleString()} KG</Typography></CardContent></Card></Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}><CardContent><Typography variant="body2" color="text.secondary">Total Sales</Typography><Typography variant="h5" sx={{ mt: 1, fontWeight: 700 }}>{formatPrice(summary.totalSales)}</Typography></CardContent></Card></Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Card elevation={0} sx={{ border: "1px solid", borderColor: summary.totalProfit >= 0 ? "success.main" : "error.main", borderRadius: 3, bgcolor: summary.totalProfit >= 0 ? "success.50" : "error.50" }}><CardContent><Typography variant="body2" color={summary.totalProfit >= 0 ? "success.dark" : "error.dark"}>Total Profit</Typography><Typography variant="h5" sx={{ mt: 1, fontWeight: 700, color: summary.totalProfit >= 0 ? "success.main" : "error.main" }}>{formatPrice(summary.totalProfit)}</Typography></CardContent></Card></Grid>
+      {currentMonthData && <Grid container spacing={2} sx={{ mb: 3, alignItems: "stretch" }}>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Card elevation={0} sx={{ height: "100%", border: "1px solid", borderColor: "divider", borderRadius: 3 }}><CardContent sx={{ minHeight: 122 }}><Typography variant="body2" color="text.secondary">Total Items</Typography><Typography variant="h5" sx={{ mt: 1, fontWeight: 700 }}>{items.length}</Typography></CardContent></Card></Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Card elevation={0} sx={{ height: "100%", border: "1px solid", borderColor: "divider", borderRadius: 3 }}><CardContent sx={{ minHeight: 122 }}><Typography variant="body2" color="text.secondary">Total Weight</Typography><Typography variant="h5" sx={{ mt: 1, fontWeight: 700 }}>{summary.totalWeight.toLocaleString()} KG</Typography></CardContent></Card></Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Card elevation={0} sx={{ height: "100%", border: "1px solid", borderColor: "divider", borderRadius: 3 }}><CardContent sx={{ minHeight: 122 }}><Typography variant="body2" color="text.secondary">Total Sales</Typography><Typography variant="h5" sx={{ mt: 1, fontWeight: 700 }}>{formatPrice(summary.totalSales)}</Typography></CardContent></Card></Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Card elevation={0} sx={{ height: "100%", border: "1px solid", borderColor: summary.totalProfit >= 0 ? "success.main" : "error.main", borderRadius: 3, bgcolor: summary.totalProfit >= 0 ? "success.50" : "error.50" }}><CardContent sx={{ minHeight: 122 }}><Typography variant="body2" color={summary.totalProfit >= 0 ? "success.dark" : "error.dark"}>Total Profit</Typography><Typography variant="h5" sx={{ mt: 1, fontWeight: 700, color: summary.totalProfit >= 0 ? "success.main" : "error.main" }}>{formatPrice(summary.totalProfit)}</Typography></CardContent></Card></Grid>
       </Grid>}
 
       <Paper elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden", mb: 4 }}>

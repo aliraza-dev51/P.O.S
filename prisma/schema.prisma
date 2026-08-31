@@ -61,6 +61,7 @@ model GroceryItem {
   rate           Decimal   @db.Decimal(12, 2)
   transportation Decimal   @db.Decimal(12, 2)
   sellingPrice   Decimal   @db.Decimal(12, 2)
+  entryDate      DateTime  @default(now())
   month          Int       @default(1)
   year           Int       @default(2024)
   isClosed       Boolean   @default(false)
@@ -71,6 +72,7 @@ model GroceryItem {
 
   @@unique([userId, itemName, month, year])
   @@index([userId, month, year])
+  @@index([userId, entryDate])
   @@index([userId, isClosed])
   @@map("grocery_items")
 }

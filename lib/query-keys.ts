@@ -35,8 +35,8 @@ export const salesKeys = {
 
 export const groceryKeys = {
   all: ["grocery"] as const,
-  list: (month?: number, year?: number) =>
-    [...groceryKeys.all, "list", month ?? "current", year ?? "current"] as const,
+  list: (month?: number, year?: number, date?: string) =>
+    [...groceryKeys.all, "list", month ?? "current", year ?? "current", date ?? "all"] as const,
   history: () => [...groceryKeys.all, "history"] as const,
   month: (month: number, year: number) => [...groceryKeys.all, "month", month, year] as const,
   detail: (id: number) => [...groceryKeys.all, "detail", id] as const,

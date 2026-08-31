@@ -26,6 +26,9 @@ export async function PUT(
     const rate = Number(body.rate);
     const transportation = Number(body.transportation);
     const sellingPrice = Number(body.sellingPrice);
+    const entryDate = body.entryDate
+      ? new Date(`${String(body.entryDate).slice(0, 10)}T00:00:00.000Z`)
+      : undefined;
 
     if (
       !Number.isInteger(id) ||
@@ -40,9 +43,14 @@ export async function PUT(
       !Number.isFinite(transportation) ||
       transportation < 0 ||
       !Number.isFinite(sellingPrice) ||
-      sellingPrice <= 0
+      sellingPrice <= 0 ||
+      (entryDate !== undefined && Number.isNaN(entryDate.getTime()))
     ) {
       return NextResponse.json({ error: "Invalid grocery item data." }, { status: 400 });
+    }
+
+    if (entryDate && entryDate.getTime() > Date.now()) {
+      return NextResponse.json({ error: "Future dates are not allowed." }, { status: 400 });
     }
 
     const existing = await prisma.groceryItem.findFirst({ where: { id, userId: currentUser.id } });
@@ -60,7 +68,15 @@ export async function PUT(
 
     const item = await prisma.groceryItem.update({
       where: { id },
-      data: { itemName, weight, quantity, rate, transportation, sellingPrice },
+      data: {
+        itemName,
+        weight,
+        quantity,
+        rate,
+        transportation,
+        sellingPrice,
+        ...(entryDate ? { entryDate } : {}),
+      },
     });
 
     return NextResponse.json({
@@ -71,6 +87,7 @@ export async function PUT(
       rate: toNumber(item.rate),
       transportation: toNumber(item.transportation),
       sellingPrice: toNumber(item.sellingPrice),
+      entryDate: item.entryDate.toISOString(),
       month: item.month,
       year: item.year,
       isClosed: item.isClosed,

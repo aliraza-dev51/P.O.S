@@ -32,14 +32,16 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const month = url.searchParams.get("month");
     const year = url.searchParams.get("year");
+    const date = url.searchParams.get("date");
     const closed = url.searchParams.get("closed");
     const search = url.searchParams.get("search");
 
     // If closed=true, return all closed months (history)
     if (closed === "true") {
-      const closedMonths = await prisma.groceryItem.groupBy({
-        by: ["month", "year"],
+      const closedMonths = await prisma.groceryItem.findMany({
         where: { userId, isClosed: true },
+        select: { month: true, year: true },
+        distinct: ["month", "year"],
         orderBy: [{ year: "desc" }, { month: "desc" }],
       });
 
@@ -81,6 +83,7 @@ export async function GET(request: Request) {
               rate: toNumber(item.rate),
               transportation: toNumber(item.transportation),
               sellingPrice: toNumber(item.sellingPrice),
+              entryDate: item.entryDate.toISOString(),
               month: item.month,
               year: item.year,
               isClosed: item.isClosed,
@@ -104,6 +107,10 @@ export async function GET(request: Request) {
     const targetMonth = month ? Number(month) : currentMonth;
     const targetYear = year ? Number(year) : currentYear;
 
+    if (date && Number.isNaN(Date.parse(date))) {
+      return NextResponse.json({ error: "Invalid date." }, { status: 400 });
+    }
+
     // Fetch items for the month
     let whereClause: any = {
       userId,
@@ -111,6 +118,14 @@ export async function GET(request: Request) {
       year: targetYear,
       isClosed: false,
     };
+
+    if (date) {
+      const selectedDate = new Date(`${date}T00:00:00.000Z`);
+      whereClause.entryDate = {
+        gte: selectedDate,
+        lt: new Date(selectedDate.getTime() + 24 * 60 * 60 * 1000),
+      };
+    }
 
     // Apply search filter if provided
     if (search) {
@@ -168,6 +183,7 @@ export async function GET(request: Request) {
         rate: toNumber(item.rate),
         transportation: toNumber(item.transportation),
         sellingPrice: toNumber(item.sellingPrice),
+        entryDate: item.entryDate.toISOString(),
         month: item.month,
         year: item.year,
         isClosed: item.isClosed,
@@ -252,6 +268,9 @@ export async function POST(request: Request) {
     const rate = Number(body.rate);
     const transportation = Number(body.transportation);
     const sellingPrice = Number(body.sellingPrice);
+    const entryDate = body.entryDate
+      ? new Date(`${String(body.entryDate).slice(0, 10)}T00:00:00.000Z`)
+      : new Date();
 
     if (
       !itemName ||
@@ -264,7 +283,8 @@ export async function POST(request: Request) {
       !Number.isFinite(transportation) ||
       transportation < 0 ||
       !Number.isFinite(sellingPrice) ||
-      sellingPrice <= 0
+      sellingPrice <= 0 ||
+      Number.isNaN(entryDate.getTime())
     ) {
       return NextResponse.json(
         { error: "Please fill all fields correctly." },
@@ -273,7 +293,12 @@ export async function POST(request: Request) {
     }
 
     // Get current month/year
-    const { month, year } = getCurrentMonthYear();
+    const month = entryDate.getUTCMonth() + 1;
+    const year = entryDate.getUTCFullYear();
+
+    if (entryDate.getTime() > Date.now()) {
+      return NextResponse.json({ error: "Future dates are not allowed." }, { status: 400 });
+    }
 
     // Check if current month is closed
     const monthClosed = await prisma.groceryItem.findFirst({
@@ -302,6 +327,7 @@ export async function POST(request: Request) {
         rate,
         transportation,
         sellingPrice,
+        entryDate,
         month,
         year,
         isClosed: false,
@@ -317,6 +343,7 @@ export async function POST(request: Request) {
         rate: toNumber(item.rate),
         transportation: toNumber(item.transportation),
         sellingPrice: toNumber(item.sellingPrice),
+        entryDate: item.entryDate.toISOString(),
         month: item.month,
         year: item.year,
         isClosed: item.isClosed,

@@ -55,35 +55,35 @@ const theme = createTheme({
     fontFamily: "Roboto, Helvetica, Arial, sans-serif",
 
     h1: {
-      fontWeight: 700,
+      fontWeight: 600,
     },
 
     h2: {
-      fontWeight: 700,
+      fontWeight: 600,
     },
 
     h3: {
-      fontWeight: 700,
+      fontWeight: 400 ,
     },
 
     h4: {
-      fontWeight: 700,
+      fontWeight: 400,
     },
 
     h5: {
-      fontWeight: 600,
+      fontWeight: 200,  
     },
 
     h6: {
-      fontWeight: 600,
+      fontWeight: 200,
     },
 
     body1: {
-      fontWeight: 400,
+      fontWeight: 200,
     },
 
     body2: {
-      fontWeight: 400,
+      fontWeight: 200,
     },
 
     button: {

@@ -17,10 +17,10 @@ import {
 import { groceryKeys } from "@/lib/query-keys";
 
 // Get current month's grocery items
-export function useGrocery(month?: number, year?: number) {
+export function useGrocery(month?: number, year?: number, date?: string) {
   return useQuery({
-    queryKey: groceryKeys.list(month, year),
-    queryFn: () => getGrocery(month, year),
+    queryKey: groceryKeys.list(month, year, date),
+    queryFn: () => getGrocery(month, year, date),
   });
 }
 
@@ -42,10 +42,10 @@ export function useGroceryMonth(month: number, year: number) {
 }
 
 // Search grocery items
-export function useGrocerySearch(search: string, month?: number, year?: number) {
+export function useGrocerySearch(search: string, month?: number, year?: number, date?: string) {
   return useQuery({
     queryKey: ["grocery", "search", search, month, year],
-    queryFn: () => searchGrocery(search, month, year),
+    queryFn: () => searchGrocery(search, month, year, date),
     enabled: search.length > 0,
   });
 }
@@ -62,6 +62,7 @@ export function useCreateGrocery() {
       rate: number;
       transportation: number;
       sellingPrice: number;
+      entryDate?: string;
     }) => createGrocery(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: groceryKeys.all });
@@ -86,6 +87,7 @@ export function useUpdateGrocery() {
         rate: number;
         transportation: number;
         sellingPrice: number;
+        entryDate?: string;
       };
     }) => updateGrocery(id, payload),
     onSuccess: (data) => {

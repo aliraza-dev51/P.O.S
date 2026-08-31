@@ -6,6 +6,7 @@ export type GroceryItem = {
   rate: number;
   transportation: number;
   sellingPrice: number;
+  entryDate: string;
   month: number;
   year: number;
   isClosed: boolean;
@@ -27,10 +28,11 @@ export type GroceryMonth = {
 };
 
 // Get current/active month's grocery items with metadata
-export async function getGrocery(month?: number, year?: number): Promise<GroceryMonth> {
+export async function getGrocery(month?: number, year?: number, date?: string): Promise<GroceryMonth> {
   const params = new URLSearchParams();
   if (month !== undefined) params.append("month", String(month));
   if (year !== undefined) params.append("year", String(year));
+  if (date) params.append("date", date);
 
   const response = await fetch(`/api/grocery?${params.toString()}`, { cache: "no-store" });
   const data = await response.json();
@@ -70,11 +72,13 @@ export async function getGroceryMonth(month: number, year: number): Promise<Groc
 export async function searchGrocery(
   search: string,
   month?: number,
-  year?: number
+  year?: number,
+  date?: string
 ): Promise<GroceryItem[]> {
   const params = new URLSearchParams({ search });
   if (month !== undefined) params.append("month", String(month));
   if (year !== undefined) params.append("year", String(year));
+  if (date) params.append("date", date);
 
   const response = await fetch(`/api/grocery?${params.toString()}`, { cache: "no-store" });
   const data = await response.json();
@@ -94,6 +98,7 @@ export async function createGrocery(payload: {
   rate: number;
   transportation: number;
   sellingPrice: number;
+  entryDate?: string;
 }): Promise<GroceryItem> {
   const response = await fetch("/api/grocery", {
     method: "POST",
@@ -120,6 +125,7 @@ export async function updateGrocery(
     rate: number;
     transportation: number;
     sellingPrice: number;
+    entryDate?: string;
   }
 ): Promise<GroceryItem> {
   const response = await fetch(`/api/grocery/${id}`, {
