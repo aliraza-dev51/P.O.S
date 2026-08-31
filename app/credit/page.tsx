@@ -84,7 +84,7 @@ export default function CreditPage() {
   const queryClient = useQueryClient();
   const [selectedType, setSelectedType] = useState<CreditType>("DAILY");
 
-  const { data: customers = [], isLoading: loading } = useCredits(selectedType);
+  const { data: customers = [] } = useCredits(selectedType);
   const createCreditMutation = useCreateCredit(selectedType);
   const updateCreditMutation = useUpdateCredit(selectedType);
   const deleteCreditMutation = useDeleteCredit(selectedType);
@@ -369,94 +369,73 @@ export default function CreditPage() {
         },
       }}
     >
-      {/* CREDIT TYPE SELECTOR */}
-
-      <Box
+      <Paper
+        elevation={0}
         sx={{
           mb: 3,
+          p: 1,
           display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
           gap: 1,
           flexWrap: "wrap",
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 2,
+          bgcolor: "background.paper",
         }}
       >
-        {(["DAILY", "MONTHLY"] as CreditType[]).map((type) => (
-          <Button
-            key={type}
-            variant={selectedType === type ? "contained" : "outlined"}
-            onClick={() => setSelectedType(type)}
-            size="small"
-          >
-            {type === "DAILY" ? "📅 Daily Credit" : "📆 Monthly Credit"}
-          </Button>
-        ))}
-      </Box>
-
-      {/* HEADER */}
-
-      <Stack
-        direction={{
-          xs: "column",
-          sm: "row",
-        }}
-        sx={{
-          justifyContent: "space-between",
-          alignItems: {
-            xs: "flex-start",
-            sm: "center",
-          },
-          gap: 2,
-          mb: 4,
-        }}
-      >
-        <Box>
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{
-              alignItems: "center",
-            }}
-          >
-            <CreditScore color="primary" />
-
-            <Typography
-              variant="h4"
-              sx={{
-                fontWeight: 700,
-              }}
+        <Stack
+          direction="row"
+          spacing={0.5}
+          sx={{
+            flex: { xs: "1 1 100%", sm: "0 1 auto" },
+            p: 0.5,
+            borderRadius: 1.5,
+            bgcolor: "action.hover",
+          }}
+        >
+          {(["DAILY", "MONTHLY"] as CreditType[]).map((type) => (
+            <Button
+              key={type}
+              variant={selectedType === type ? "contained" : "text"}
+              onClick={() => setSelectedType(type)}
+              size="small"
+              sx={{ flex: { xs: 1, sm: "initial" }, px: { xs: 1, sm: 2 } }}
             >
-              {selectedType === "DAILY" ? "Daily Credit" : "Monthly Credit"} / Khata
-            </Typography>
-          </Stack>
+              {type === "DAILY" ? "Daily Credit" : "Monthly Credit"}
+            </Button>
+          ))}
+        </Stack>
 
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{
-              mt: 0.5,
-            }}
-          >
-            Manage {selectedType.toLowerCase()} customer credit and outstanding balances
-          </Typography>
-        </Box>
-
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{
+            flex: { xs: "1 1 100%", sm: "0 1 auto" },
+            justifyContent: { xs: "stretch", sm: "flex-end" },
+          }}
+        >
           <Button
-            variant="outlined"
+            variant="contained"
             color="secondary"
             onClick={() => closeCreditMonth(selectedType)}
+            sx={{ flex: { xs: 1, sm: "initial" }, px: { xs: 1, sm: 2 } }}
           >
             Close {selectedType === "DAILY" ? "Daily" : "Monthly"}
           </Button>
 
           <Button
             variant="contained"
+            color="primary"
             startIcon={<Add />}
             onClick={openAddModal}
+            sx={{ flex: { xs: 1, sm: "initial" } }}
           >
             Add {selectedType === "DAILY" ? "Daily" : "Monthly"} Credit
           </Button>
         </Stack>
-      </Stack>
+      </Paper>
 
       {/* SUMMARY CARDS */}
 
@@ -811,11 +790,7 @@ export default function CreditPage() {
 
         <Divider />
 
-        {loading ? (
-          <Box sx={{ py: 10, textAlign: "center" }}>
-            <Typography color="text.secondary">Loading credit records...</Typography>
-          </Box>
-        ) : customers.length === 0 ? (
+        {customers.length === 0 ? (
           <Box
             sx={{
               py: 10,

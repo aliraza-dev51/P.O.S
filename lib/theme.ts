@@ -10,6 +10,13 @@ const theme = createTheme({
       contrastText: "#fff",
     },
 
+    secondary: {
+      light: grey[50],
+      main: grey[100],
+      dark: grey[200],
+      contrastText: blue[600],
+    },
+
     success: {
       light: green[300],
       main: green[600],
@@ -45,7 +52,7 @@ const theme = createTheme({
   },
 
   typography: {
-    fontFamily: "Inter, sans-serif",
+    fontFamily: "Roboto, Helvetica, Arial, sans-serif",
 
     h1: {
       fontWeight: 700,
@@ -99,6 +106,18 @@ const theme = createTheme({
           boxShadow: "none",
         },
       },
+      variants: [
+        {
+          props: { variant: "contained", color: "secondary" },
+          style: {
+            color: blue[600],
+            backgroundColor: grey[100],
+            "&:hover": {
+              backgroundColor: grey[200],
+            },
+          },
+        },
+      ],
     },
     MuiCard: {
       styleOverrides: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 
 import {
   Box,
@@ -13,7 +13,6 @@ import {
   Stack,
   Avatar,
   Divider,
-  CircularProgress,
   Alert,
 } from "@mui/material";
 
@@ -77,10 +76,6 @@ const money = (value: number) =>
 export default function Dashboard() {
   const { data, isLoading, isError, error, refetch } = useDashboard();
 
-  const loadDashboard = useCallback(async () => {
-    await refetch();
-  }, [refetch]);
-
   const chartDataset = useMemo(() => {
     return data?.chartData ?? [];
   }, [data]);
@@ -101,23 +96,7 @@ export default function Dashboard() {
   };
 
   if (isLoading) {
-    return (
-      <Box
-        sx={{
-          minHeight: "70vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Stack spacing={2} sx={{ alignItems: "center" }}>
-          <CircularProgress />
-          <Typography color="text.secondary">
-            Dashboard loading...
-          </Typography>
-        </Stack>
-      </Box>
-    );
+    return null;
   }
 
   if (isError || !data) {
@@ -127,7 +106,7 @@ export default function Dashboard() {
         <Button
           sx={{ mt: 2 }}
           variant="contained"
-          onClick={loadDashboard}
+          onClick={() => refetch()}
         >
           Retry
         </Button>
@@ -210,12 +189,6 @@ export default function Dashboard() {
           </Typography>
         </Box>
 
-        <Button
-          variant="outlined"
-          onClick={loadDashboard}
-        >
-          Refresh
-        </Button>
       </Box>
 
       {/* Stats */}

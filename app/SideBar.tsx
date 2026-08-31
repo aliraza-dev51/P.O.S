@@ -3,21 +3,27 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 import Box from "@mui/material/Box";
+import AppBar from "@mui/material/AppBar";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Toolbar from "@mui/material/Toolbar";
 import Tooltip from "@mui/material/Tooltip";
-
-import BrandLogo from "@/components/BrandLogo";
-
+import Typography from "@mui/material/Typography";
+import MonetizationOnIcon from "@mui/icons-material/MonetizationOn";
 import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
+import MenuOpenRoundedIcon from "@mui/icons-material/MenuOpenRounded";
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import { sidebarColors } from "@/lib/sidebar-colors";
 
 import {
   CreditScore,
@@ -25,71 +31,71 @@ import {
   LocalGroceryStore,
   LocalShipping,
   Badge,
-  AttachMoney,
   CurrencyExchange,
 } from "@mui/icons-material";
 
-const drawerWidth = 72;
+const collapsedWidth = 72;
+const expandedWidth = 240;
 
 /* =========================================================
    TOP USER ITEM
 ========================================================= */
 
 const primaryItems = [
+
   {
-    label: "User",
+    label: "user",
     href: "/user",
-    icon: <PersonRoundedIcon />,
-    color: "#2563eb",
-  },
+    icon: <AccountCircleIcon fontSize="large" />,
+    color: sidebarColors[0],
+  }
 ];
 
 /* =========================================================
    MAIN NAVIGATION
 ========================================================= */
-
 const secondaryItems = [
   {
     label: "Dashboard",
     href: "/dashboard",
     icon: <InsertChart />,
-    color: "#2563eb",
+    color: sidebarColors[0],
   },
   {
     label: "Sale",
     href: "/sale",
-    icon: <AttachMoney />,
-    color: "#16a34a",
+    icon: <MonetizationOnIcon />,
+    color: sidebarColors[1],
   },
   {
     label: "Grocery",
     href: "/grocery",
     icon: <LocalGroceryStore />,
-    color: "#f59e0b",
+    color: sidebarColors[2],
   },
   {
     label: "Credit",
     href: "/credit",
     icon: <CreditScore />,
-    color: "#7c3aed",
+    color: sidebarColors[3],
   },
   {
     label: "Invest",
     href: "/invest",
     icon: <CurrencyExchange />,
-    color: "#db2777",
+    color: sidebarColors[4],
   },
   {
     label: "Vendors",
     href: "/vendors",
     icon: <LocalShipping />,
-    color: "#ea580c",
+    color: sidebarColors[5],
   },
   {
     label: "Employees",
     href: "/employees",
     icon: <Badge />,
-    color: "#0891b2",
+    color: sidebarColors[6],
   },
 ];
 
@@ -122,9 +128,11 @@ type SidebarItem = {
 function NavigationItem({
   item,
   onNavigate,
+  expanded,
 }: {
   item: SidebarItem;
   onNavigate?: () => void;
+  expanded: boolean;
 }) {
   const pathname = usePathname();
 
@@ -135,7 +143,7 @@ function NavigationItem({
 
   return (
     <Tooltip
-      title={item.label}
+      title={expanded ? "" : item.label}
       placement="right"
       slotProps={{
         tooltip: {
@@ -158,7 +166,8 @@ function NavigationItem({
           my: 0.75,
           minHeight: 48,
           borderRadius: 2,
-          justifyContent: "center",
+          justifyContent: expanded ? "flex-start" : "center",
+          px: expanded ? 1.5 : 1,
 
           transition: "all 0.2s ease",
 
@@ -183,13 +192,23 @@ function NavigationItem({
       >
         <ListItemIcon
           sx={{
-            minWidth: 0,
+            minWidth: expanded ? 38 : 0,
             color: item.color || "inherit",
             justifyContent: "center",
           }}
         >
           {item.icon}
         </ListItemIcon>
+        {expanded && (
+          <ListItemText
+            primary={
+              <Typography noWrap sx={{ fontSize: 14, fontWeight: 600 }}>
+                {item.label}
+              </Typography>
+              
+            }
+          />
+        )}
       </ListItemButton>
     </Tooltip>
   );
@@ -201,9 +220,15 @@ function NavigationItem({
 
 function SidebarContent({
   onNavigate,
+  expanded,
+  userName,
 }: {
   onNavigate?: () => void;
+  expanded: boolean;
+  userName: string;
 }) {
+  const userItem = { ...primaryItems[0], label: userName || "User" };
+
   return (
     <Box
       sx={{
@@ -213,32 +238,14 @@ function SidebarContent({
         py: 1,
       }}
     >
-      {/* Logo */}
-
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          py: 1.5,
-          px: 1,
-        }}
-      >
-        <BrandLogo height={48} variant="mark-only" />
-      </Box>
-
-      <Divider sx={{ mb: 1 }} />
-
-      {/* User */}
+      {/* Top User Item */}
 
       <List disablePadding>
-        {primaryItems.map((item) => (
-          <NavigationItem
-            key={item.href}
-            item={item}
-            onNavigate={onNavigate}
-          />
-        ))}
+        <NavigationItem
+          item={userItem}
+          onNavigate={onNavigate}
+          expanded={expanded}
+        />
       </List>
 
       <Divider sx={{ my: 1 }} />
@@ -251,6 +258,7 @@ function SidebarContent({
             key={item.href}
             item={item}
             onNavigate={onNavigate}
+            expanded={expanded}
           />
         ))}
       </List>
@@ -264,6 +272,7 @@ function SidebarContent({
           <NavigationItem
             item={settingsItem}
             onNavigate={onNavigate}
+            expanded={expanded}
           />
         </List>
       </Box>
@@ -277,64 +286,135 @@ function SidebarContent({
 
 export default function SideBar() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [desktopExpanded, setDesktopExpanded] = React.useState(false);
+  const pathname = usePathname();
+  const { data: session } = useSession();
+  const userName = session?.user?.name?.trim() || "User";
 
-  const paperSx = {
+  const pageTitles: Record<string, string> = {
+    "/dashboard": "Dashboard",
+    "/sale": "Sales summary",
+    "/grocery": "Grocery",
+    "/credit": "Credit",
+    "/invest": "Investment",
+    "/vendors": "Vendors",
+    "/employees": "Employees",
+    "/user": "My Profile",
+    "/setting": "Settings",
+  };
+
+  const pageTitle =
+    pageTitles[pathname] ||
+    Object.entries(pageTitles).find(
+      ([href]) => href !== "/dashboard" && pathname.startsWith(`${href}/`)
+    )?.[1] ||
+    "VPOS";
+  const pageItem = [
+    ...primaryItems,
+    ...secondaryItems,
+    settingsItem,
+  ].find(
+    (item) =>
+      pathname === item.href ||
+      (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`))
+  );
+
+  React.useEffect(() => {
+    if (window.innerWidth < 600) {
+      setDesktopExpanded(false);
+    }
+  }
+, []);
+
+  const paperSx = (expanded: boolean) => ({
     boxSizing: "border-box",
-    width: drawerWidth,
+    width: expanded ? expandedWidth : collapsedWidth,
+    top: 64,
+    height: "calc(100% - 64px)",
     borderRight: 1,
     borderColor: "divider",
-  };
+    transition: "width 0.2s ease",
+    overflowX: "hidden",
+  });
 
   return (
     <>
-      {/* =================================================
-          MOBILE MENU BUTTON
-      ================================================= */}
-
-      <IconButton
-        aria-label="Open navigation"
-        onClick={() => setMobileOpen(true)}
+      <AppBar
+        position="fixed"
+        elevation={4}
         sx={{
-          display: {
-            xs: "inline-flex",
-            sm: "none",
-          },
-
-          position: "fixed",
-          top: 8,
-          left: 8,
-
-          zIndex: (theme) => theme.zIndex.drawer + 1,
-
-          bgcolor: "background.paper",
-
-          boxShadow: 1,
-
-          "&:hover": {
-            bgcolor: "background.paper",
-          },
+          bgcolor: "primary.main",
+          color: "common.white",
+          zIndex: (theme) => theme.zIndex.drawer + 2,
+          boxShadow: "0 3px 10px rgba(15, 23, 42, 0.24)",
         }}
       >
-        <MenuRoundedIcon />
-      </IconButton>
+        <Toolbar sx={{ minHeight: "64px !important", px: { xs: 2, sm: 3 } }}>
+          <IconButton
+            color="inherit"
+            aria-label="Toggle navigation"
+            onClick={() => {
+              if (window.innerWidth < 600) {
+                setMobileOpen(true);
+              } else {
+                setDesktopExpanded((current) => !current);
+              }
+            }}
+            sx={{ mr: 2 }}
+          >
+            {desktopExpanded ? <MenuOpenRoundedIcon /> : <MenuRoundedIcon />}
+          </IconButton>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              color: "common.white",
+              mr: 1,
+              "& svg": {
+                fontSize: pageItem?.href === "/user" ? 34 : 28,
+              },
+            }}
+          >
+            {pageItem?.icon}
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            {pageTitle}
+          </Typography>
+        </Toolbar>
+      </AppBar>
 
-      {/* =================================================
-          DESKTOP SIDEBAR
-      ================================================= */}
+      <Toolbar sx={{ minHeight: "64px !important" }} />
+
+      {desktopExpanded && (
+        <Box
+          aria-hidden="true"
+          sx={{
+            position: "fixed",
+            inset: "64px 0 0",
+            zIndex: (theme) => theme.zIndex.drawer - 1,
+            bgcolor: "rgba(15, 23, 42, 0.12)",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+            pointerEvents: "none",
+          }}
+        />
+      )}
 
       <Drawer
         variant="permanent"
         sx={{
-          display: {
-            xs: "none",
-            sm: "block",
-          },
-
-          "& .MuiDrawer-paper": paperSx,
+          display: { xs: "none", sm: "block" },
+          width: desktopExpanded ? expandedWidth : collapsedWidth,
+          flexShrink: 0,
+          "& .MuiDrawer-paper": paperSx(desktopExpanded),
         }}
         open
       >
-        <SidebarContent />
+        <SidebarContent
+          expanded={desktopExpanded}
+          onNavigate={() => setDesktopExpanded(false)}
+          userName={userName}
+        />
       </Drawer>
 
       {/* =================================================
@@ -354,11 +434,19 @@ export default function SideBar() {
             sm: "none",
           },
 
-          "& .MuiDrawer-paper": paperSx,
+          "& .MuiBackdrop-root": {
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+            bgcolor: "rgba(15, 23, 42, 0.12)",
+          },
+
+          "& .MuiDrawer-paper": paperSx(true),
         }}
       >
         <SidebarContent
+          expanded
           onNavigate={() => setMobileOpen(false)}
+          userName={userName}
         />
       </Drawer>
     </>

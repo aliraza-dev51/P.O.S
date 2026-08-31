@@ -64,9 +64,7 @@ export function useCreateGrocery() {
       sellingPrice: number;
     }) => createGrocery(payload),
     onSuccess: () => {
-      // Invalidate current month and history
-      queryClient.invalidateQueries({ queryKey: groceryKeys.list() });
-      queryClient.invalidateQueries({ queryKey: groceryKeys.history() });
+      queryClient.invalidateQueries({ queryKey: groceryKeys.all });
     },
   });
 }
@@ -96,8 +94,7 @@ export function useUpdateGrocery() {
         current?.map((item) => (item.id === data.id ? data : item)) ?? current
       );
 
-      // Invalidate queries
-      queryClient.invalidateQueries({ queryKey: groceryKeys.list() });
+      queryClient.invalidateQueries({ queryKey: groceryKeys.all });
       queryClient.invalidateQueries({ queryKey: groceryKeys.detail(data.id) });
     },
   });
@@ -110,8 +107,7 @@ export function useDeleteGrocery() {
   return useMutation({
     mutationFn: (id: number) => deleteGrocery(id),
     onSuccess: (_, id) => {
-      // Invalidate queries
-      queryClient.invalidateQueries({ queryKey: groceryKeys.list() });
+      queryClient.invalidateQueries({ queryKey: groceryKeys.all });
       queryClient.invalidateQueries({ queryKey: groceryKeys.detail(id) });
     },
   });

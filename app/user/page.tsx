@@ -10,7 +10,6 @@ import {
   Button,
   Card,
   CardContent,
-  CircularProgress,
   Divider,
   Grid,
   Paper,
@@ -26,6 +25,7 @@ import {
   AdminPanelSettings,
   Logout,
 } from "@mui/icons-material";
+import LoadingScreen from "@/components/LoadingScreen";
 
 type UserData = {
   id: number;
@@ -77,23 +77,7 @@ export default function UserPage() {
   };
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          minHeight: "80vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Stack spacing={2} sx={{ alignItems: "center" }}>
-          <CircularProgress />
-          <Typography color="text.secondary">
-            User profile loading...
-          </Typography>
-        </Stack>
-      </Box>
-    );
+    return <LoadingScreen label="User profile loading" />;
   }
 
   if (error || !user) {

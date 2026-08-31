@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dayjs, { Dayjs } from "dayjs";
 import {
   Add,
+  ArrowBackIosNew,
+  ArrowForwardIos,
+  CalendarMonth,
   Close,
   DeleteOutlined,
   EditOutlined,
@@ -49,6 +53,11 @@ import {
   useUpdateGrocery,
 } from "@/lib/hooks/useGrocery";
 import type { GroceryItem, GroceryMonth } from "@/lib/api/grocery";
+import LoadingScreen from "@/components/LoadingScreen";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { DateCalendar } from "@mui/x-date-pickers/DateCalendar";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import Popover from "@mui/material/Popover";
 
 type GroceryForm = {
   itemName: string;
@@ -76,6 +85,8 @@ const MONTH_NAMES = [
 export default function GroceryPage() {
   const [currentMonth, setCurrentMonth] = useState(0);
   const [currentYear, setCurrentYear] = useState(0);
+  const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null);
+  const [calendarAnchor, setCalendarAnchor] = useState<HTMLElement | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [openAddModal, setOpenAddModal] = useState(false);
   const [openViewModal, setOpenViewModal] = useState(false);
@@ -92,6 +103,7 @@ export default function GroceryPage() {
     const now = new Date();
     setCurrentMonth(now.getMonth() + 1);
     setCurrentYear(now.getFullYear());
+    setSelectedDate(dayjs(now));
   }, []);
 
   const currentGroceryQuery = useGrocery(currentMonth, currentYear);
@@ -119,7 +131,6 @@ export default function GroceryPage() {
   }, [searchQuery, currentGroceryQuery.data]);
 
   const isClosed = currentMonthData?.isClosed ?? false;
-  const isLoading = currentGroceryQuery.isLoading;
   const history = historyQuery.data ?? [];
 
   const formatPrice = (value: number) => {
@@ -263,13 +274,49 @@ export default function GroceryPage() {
       await closeMonthMutation.mutateAsync({ month: currentMonth, year: currentYear });
       showSnackbar("Month closed successfully.", "success");
       
+      const today = dayjs();
       const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
       const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
-      setCurrentMonth(nextMonth);
-      setCurrentYear(nextYear);
+      const nextPeriod = dayjs(`${nextYear}-${String(nextMonth).padStart(2, "0")}-01`);
+
+      if (!nextPeriod.isAfter(today, "month")) {
+        setCurrentMonth(nextMonth);
+        setCurrentYear(nextYear);
+        setSelectedDate(nextPeriod);
+      }
     } catch (error) {
       showSnackbar(error instanceof Error ? error.message : "Failed to close month.", "error");
     }
+  };
+
+  const currentMonthDate = dayjs().startOf("month");
+  const displayedMonth = selectedDate ?? dayjs();
+  const rangeStart = displayedMonth.startOf("month");
+  const rangeEnd = displayedMonth.endOf("month").isAfter(dayjs(), "day")
+    ? dayjs()
+    : displayedMonth.endOf("month");
+  const canGoNext = displayedMonth.startOf("month").isBefore(currentMonthDate, "month");
+
+  const handleMonthChange = (value: Dayjs | null) => {
+    if (!value) return;
+
+    const nextMonth = value.startOf("month");
+    if (nextMonth.isAfter(currentMonthDate, "month")) {
+      showSnackbar("Future months are not available.", "error");
+      return;
+    }
+
+    setSelectedDate(nextMonth);
+    setCurrentMonth(nextMonth.month() + 1);
+    setCurrentYear(nextMonth.year());
+  };
+
+  const moveMonth = (amount: number) => {
+    const nextMonth = displayedMonth.add(amount, "month").startOf("month");
+    if (nextMonth.isAfter(currentMonthDate, "month")) return;
+    setSelectedDate(nextMonth);
+    setCurrentMonth(nextMonth.month() + 1);
+    setCurrentYear(nextMonth.year());
   };
 
   const handlePrintMonth = (month: GroceryMonth) => {
@@ -387,7 +434,7 @@ export default function GroceryPage() {
   }, [items]);
 
   if (currentMonth === 0) {
-    return <Box sx={{ p: 4, textAlign: "center" }}><Typography>Loading...</Typography></Box>;
+    return <LoadingScreen label="Grocery loading" />;
   }
 
   return (
@@ -407,8 +454,71 @@ export default function GroceryPage() {
         <CardContent>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, mb: 2 }}>
             <Box>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>CURRENT MONTH</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>${MONTH_NAMES[currentMonth - 1]} ${currentYear}</Typography>
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>GROCERY PERIOD</Typography>
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                <Stack
+                  direction="row"
+                  sx={{
+                    mt: 1,
+                    width: { xs: "100%", sm: "fit-content" },
+                    minWidth: { sm: 330 },
+                    alignItems: "center",
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    bgcolor: "background.paper",
+                    overflow: "hidden",
+                  }}
+                >
+                  <IconButton
+                    size="small"
+                    aria-label="Previous month"
+                    onClick={() => moveMonth(-1)}
+                    sx={{ borderRadius: 0, px: 1.5 }}
+                  >
+                    <ArrowBackIosNew fontSize="small" />
+                  </IconButton>
+                  <Button
+                    variant="text"
+                    onClick={(event) => setCalendarAnchor(event.currentTarget)}
+                    startIcon={<CalendarMonth fontSize="small" />}
+                    sx={{
+                      flex: 1,
+                      minWidth: 0,
+                      px: 1.5,
+                      color: "text.primary",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {rangeStart.format("D MMM YYYY")} - {rangeEnd.format("D MMM YYYY")}
+                  </Button>
+                  <IconButton
+                    size="small"
+                    aria-label="Next month"
+                    onClick={() => moveMonth(1)}
+                    disabled={!canGoNext}
+                    sx={{ borderRadius: 0, px: 1.5 }}
+                  >
+                    <ArrowForwardIos fontSize="small" />
+                  </IconButton>
+                </Stack>
+                <Popover
+                  open={Boolean(calendarAnchor)}
+                  anchorEl={calendarAnchor}
+                  onClose={() => setCalendarAnchor(null)}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                >
+                  <DateCalendar
+                    value={selectedDate}
+                    onChange={(value) => {
+                      handleMonthChange(value);
+                      setCalendarAnchor(null);
+                    }}
+                    maxDate={dayjs()}
+                    disableFuture
+                  />
+                </Popover>
+              </LocalizationProvider>
               <Typography variant="body2" color="text.secondary">Status: {isClosed ? <Chip label="CLOSED" size="small" color="warning" /> : <Chip label="OPEN" size="small" color="success" />}</Typography>
             </Box>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
@@ -438,7 +548,7 @@ export default function GroceryPage() {
           </Stack>
         </Box>
         <Divider />
-        {isLoading ? <Box sx={{ p: 6, textAlign: "center" }}><Typography color="text.secondary">Loading grocery items...</Typography></Box> : items.length === 0 ? <Box sx={{ py: 10, textAlign: "center" }}><LocalGroceryStore sx={{ fontSize: 55, color: "text.disabled" }} /><Typography variant="h6" sx={{ mt: 1, fontWeight: 600 }}>No grocery items</Typography><Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>Add your first grocery item</Typography><Button variant="contained" startIcon={<Add />} onClick={openAddDialog} disabled={isClosed}>Add Item</Button></Box> : <TableContainer sx={{ maxHeight: 600, overflowX: "auto" }}>
+        {items.length === 0 ? <Box sx={{ py: 10, textAlign: "center" }}><LocalGroceryStore sx={{ fontSize: 55, color: "text.disabled" }} /><Typography variant="h6" sx={{ mt: 1, fontWeight: 600 }}>No grocery items</Typography><Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>Add your first grocery item</Typography><Button variant="contained" startIcon={<Add />} onClick={openAddDialog} disabled={isClosed}>Add Item</Button></Box> : <TableContainer sx={{ maxHeight: 600, overflowX: "auto" }}>
           <Table stickyHeader sx={{ minWidth: 1500 }}>
             <TableHead>
               <TableRow>

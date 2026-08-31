@@ -264,6 +264,8 @@ export default function EmployeesPage() {
   ======================================================= */
 
   const saveEmployee = async () => {
+    if (createEmployeeMutation.isPending || updateEmployeeMutation.isPending) return;
+
     const name = form.name.trim();
     const phone = form.phone.trim();
     const cnic = form.cnic.trim();
@@ -285,14 +287,6 @@ export default function EmployeesPage() {
         joiningDate: form.joiningDate,
         image: form.image,
       };
-
-      const url = editingId !== null ? `/api/employees/${editingId}` : "/api/employees";
-      const method = editingId !== null ? "PUT" : "POST";
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
 
       if (editingId !== null) {
         await updateEmployeeMutation.mutateAsync({
@@ -1685,10 +1679,18 @@ export default function EmployeesPage() {
             onClick={
               saveEmployee
             }
+            disabled={
+              createEmployeeMutation.isPending ||
+              updateEmployeeMutation.isPending
+            }
           >
             {editingId !== null
-              ? "Update Employee"
-              : "Add Employee"}
+              ? updateEmployeeMutation.isPending
+                ? "Updating..."
+                : "Update Employee"
+              : createEmployeeMutation.isPending
+                ? "Adding..."
+                : "Add Employee"}
           </Button>
         </DialogActions>
       </Dialog>

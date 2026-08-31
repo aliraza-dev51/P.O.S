@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   useCloseSalesMonth,
@@ -21,7 +21,6 @@ import {
   EditOutlined,
   Lock,
   PointOfSale,
-  Refresh,
   Visibility,
 } from "@mui/icons-material";
 
@@ -271,36 +270,12 @@ export default function SellPage() {
      Therefore the page loads that endpoint directly.
   ======================================================= */
 
-  const loadSales = useCallback(async () => {
-    setError("");
-
-    try {
-      const result = await salesQuery.refetch();
-      if (result.isError) {
-        throw result.error;
-      }
-    } catch (err) {
-      console.error("SellPage load error:", err);
-      setError(
-        err instanceof Error ? err.message : "Unable to load sales."
-      );
-    }
-  }, [salesQuery]);
-
   useEffect(() => {
     if (activeMonth) {
       setSelectedMonth(activeMonth.month);
       setSelectedYear(activeMonth.year);
     }
   }, [activeMonth]);
-
-  /* =======================================================
-     REFRESH
-  ======================================================= */
-
-  const refreshPage = async () => {
-    await loadSales();
-  };
 
   /* =======================================================
      MONTH STATUS
@@ -894,20 +869,6 @@ export default function SellPage() {
         >
           <Button
             variant="outlined"
-            startIcon={<Refresh />}
-            onClick={
-              refreshPage
-            }
-            disabled={loading}
-            fullWidth={
-              false
-            }
-          >
-            Refresh
-          </Button>
-
-          <Button
-            variant="outlined"
             color="warning"
             startIcon={<Lock />}
             onClick={() =>
@@ -1370,34 +1331,7 @@ export default function SellPage() {
 
         <Divider />
 
-        {loading ? (
-          <Box
-            sx={{
-              minHeight: 300,
-              display: "flex",
-              alignItems:
-                "center",
-              justifyContent:
-                "center",
-            }}
-          >
-            <Stack
-              spacing={2}
-              sx={{
-                alignItems:
-                  "center",
-              }}
-            >
-              <CircularProgress />
-
-              <Typography
-                color="text.secondary"
-              >
-                Loading sales...
-              </Typography>
-            </Stack>
-          </Box>
-        ) : sales.length ===
+        {sales.length ===
           0 ? (
           <Box
             sx={{

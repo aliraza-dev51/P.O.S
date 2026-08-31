@@ -30,6 +30,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import LoadingScreen from "@/components/LoadingScreen";
 
 /* =========================================================
    TYPES
@@ -218,7 +219,7 @@ export default function SettingsPage() {
   ======================================================= */
 
   if (!loaded) {
-    return null;
+    return <LoadingScreen label="Settings loading" />;
   }
 
   /* =======================================================

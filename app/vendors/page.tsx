@@ -79,7 +79,7 @@ const emptyForm: VendorForm = {
 ========================================================= */
 
 export default function VendorsPage() {
-  const { data: items = initialItems, isLoading: loading } = useVendors();
+  const { data: items = initialItems } = useVendors();
   const createVendorMutation = useCreateVendor();
   const updateVendorMutation = useUpdateVendor();
   const deleteVendorMutation = useDeleteVendor();
@@ -195,24 +195,6 @@ export default function VendorsPage() {
     try {
       setSaving(true);
 
-      const response = await fetch(
-        editingId !== null ? `/api/vendors/${editingId}` : "/api/vendors",
-        {
-          method: editingId !== null ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            vendorName,
-            billAmount,
-            status: form.status,
-          }),
-        }
-      );
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error || "Unable to save vendor bill");
-      }
-
       if (editingId !== null) {
         await updateVendorMutation.mutateAsync({
           id: editingId,
@@ -251,15 +233,6 @@ export default function VendorsPage() {
     if (!confirmDelete) return;
 
     try {
-      const response = await fetch(`/api/vendors/${id}`, {
-        method: "DELETE",
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error || "Unable to delete vendor bill");
-      }
-
       await deleteVendorMutation.mutateAsync(id);
     } catch (error) {
       console.error("Unable to delete vendor bill:", error);
@@ -627,11 +600,7 @@ export default function VendorsPage() {
             EMPTY STATE
         ================================================= */}
 
-        {loading ? (
-          <Box sx={{ py: 10, textAlign: "center" }}>
-            <Typography variant="body1" color="text.secondary">Loading vendor bills...</Typography>
-          </Box>
-        ) : items.length === 0 ? (
+        {items.length === 0 ? (
           <Box
             sx={{
               py: 10,

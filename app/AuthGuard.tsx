@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 import SideBar from "./SideBar";
+import LoadingScreen from "@/components/LoadingScreen";
 
 export default function AuthGuard({
   children,
@@ -47,7 +48,7 @@ export default function AuthGuard({
   ========================================= */
 
   if (status === "loading") {
-    return null;
+    return <LoadingScreen label="Loading session" />;
   }
 
   /* =========================================
@@ -63,7 +64,7 @@ export default function AuthGuard({
   ========================================= */
 
   return (
-    <div className="h-screen">
+    <div className="min-h-screen">
       <SideBar />
 
       <div className="bg-white sm:ml-[72px]">
